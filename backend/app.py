@@ -35,7 +35,6 @@ def create_app() -> Flask:
 
     @app.get("/health")
     def health_check():
-        # Check MongoDB connection and log error if any
         try:
             app.db.command("ping")
             return {"status": "ok", "db": "connected"}
@@ -47,9 +46,12 @@ def create_app() -> Flask:
     return app
 
 
+# 👇 THIS is the important change: create a global `app` instance
+app = create_app()
+
 if __name__ == "__main__":
-    app = create_app()
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5000"))
     app.run(host=host, port=port, debug=True)
+
 
