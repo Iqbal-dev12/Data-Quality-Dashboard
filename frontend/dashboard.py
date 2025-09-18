@@ -153,7 +153,7 @@ load_custom_css()
 # -------------------------
 st.sidebar.title("Controls")
 
-default_api = os.getenv("API_BASE_URL", "http://localhost:5000")
+default_api = os.getenv("BACKEND_URL", "https://distinguished-imagination-production.up.railway.app")
 api_base_url = st.sidebar.text_input("API Base URL", value=default_api).rstrip("/")
 
 # Date presets with awareness of uploaded dataset date range
