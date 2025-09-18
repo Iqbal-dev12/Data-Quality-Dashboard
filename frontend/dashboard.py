@@ -55,6 +55,9 @@ st.markdown(
 		.card { border-radius: 14px; padding: 18px 18px; background: #0b1222; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 6px 22px rgba(0,0,0,0.25); color: #e5e7eb; }
 		.section-title { font-size: 16px; font-weight: 700; margin: 0 0 12px 0; color: #e5e7eb; }
 		.small-muted { color: #9ca3af; font-size: 12px; }
+		.hero-title { font-size: 28px; font-weight: 800; color: #fafafa; margin-bottom: 8px; }
+		.dq-progress { background: rgba(255,255,255,0.1); border-radius: 8px; height: 8px; overflow: hidden; }
+		.dq-progress .fill { background: linear-gradient(90deg, #10b981, #34d399); height: 100%; transition: width 0.3s ease; }
 		
 		/* Footer Styling */
 		.app-footer { 
@@ -142,6 +145,209 @@ st.markdown(
 		
 		/* Ensure main content doesn't overlap footer */
 		.main .block-container { padding-bottom: 120px !important; }
+		
+		/* Mobile Responsive Styles */
+		@media screen and (max-width: 768px) {
+			/* Main container adjustments */
+			.main .block-container { 
+				padding-bottom: 180px !important; 
+				padding-left: 1rem !important;
+				padding-right: 1rem !important;
+			}
+			
+			/* KPI Cards - Stack vertically on mobile */
+			.kpi-card { 
+				margin-bottom: 1rem !important;
+				padding: 16px !important;
+			}
+			.kpi-value { 
+				font-size: 24px !important; 
+			}
+			.kpi-title { 
+				font-size: 11px !important; 
+			}
+			
+			/* Footer adjustments for mobile */
+			.app-footer { 
+				padding: 8px 10px !important; 
+				height: auto !important;
+			}
+			.footer-links { 
+				flex-direction: column !important; 
+				gap: 8px !important;
+			}
+			.footer-item { 
+				margin: 0 5px 8px 5px !important; 
+				flex: none !important;
+			}
+			.footer-title { 
+				padding: 6px 10px !important; 
+				font-size: 13px !important;
+				margin-bottom: 4px !important;
+			}
+			.footer-desc { 
+				min-width: 280px !important; 
+				max-width: 90vw !important;
+				font-size: 11px !important;
+				padding: 10px !important;
+				left: 10px !important;
+				transform: none !important;
+			}
+			
+			/* Section titles */
+			.section-title { 
+				font-size: 14px !important; 
+				margin-bottom: 8px !important;
+			}
+			
+			/* Hero title */
+			.hero-title { 
+				font-size: 20px !important; 
+			}
+			
+			/* Cards and containers */
+			.card { 
+				padding: 12px !important; 
+				margin-bottom: 1rem !important;
+			}
+			
+			/* Streamlit columns - force single column on mobile */
+			.stColumns > div { 
+				min-width: 100% !important; 
+				margin-bottom: 1rem !important;
+			}
+			
+			/* Tables - horizontal scroll */
+			.stDataFrame { 
+				overflow-x: auto !important; 
+			}
+			
+			/* Charts - make responsive */
+			.stPlotlyChart, .stPyplot { 
+				width: 100% !important; 
+				height: auto !important;
+			}
+			
+			/* Form elements */
+			.stSelectbox, .stTextInput, .stTextArea { 
+				margin-bottom: 0.5rem !important; 
+			}
+			
+			/* Buttons */
+			.stButton > button { 
+				width: 100% !important; 
+				margin-bottom: 0.5rem !important;
+			}
+			
+			/* Download buttons */
+			.stDownloadButton > button { 
+				width: 100% !important; 
+				margin-bottom: 0.5rem !important;
+				font-size: 12px !important;
+				padding: 0.5rem !important;
+			}
+			
+			/* Metrics */
+			.stMetric { 
+				margin-bottom: 1rem !important; 
+			}
+			
+			/* Sidebar adjustments */
+			.css-1d391kg { 
+				padding-top: 1rem !important; 
+			}
+		}
+		
+		@media screen and (max-width: 480px) {
+			/* Extra small screens */
+			.main .block-container { 
+				padding-left: 0.5rem !important;
+				padding-right: 0.5rem !important;
+				padding-bottom: 200px !important;
+			}
+			
+			.kpi-card { 
+				padding: 12px !important; 
+			}
+			.kpi-value { 
+				font-size: 20px !important; 
+			}
+			.kpi-title { 
+				font-size: 10px !important; 
+			}
+			
+			.footer-desc { 
+				min-width: 260px !important; 
+				max-width: 95vw !important;
+				font-size: 10px !important;
+			}
+			
+			.footer-title { 
+				font-size: 12px !important; 
+				padding: 5px 8px !important;
+			}
+			
+			.hero-title { 
+				font-size: 18px !important; 
+			}
+			
+			.section-title { 
+				font-size: 13px !important; 
+			}
+		}
+		
+		/* Tablet landscape adjustments */
+		@media screen and (min-width: 769px) and (max-width: 1024px) {
+			.main .block-container { 
+				padding-left: 1.5rem !important;
+				padding-right: 1.5rem !important;
+			}
+			
+			.footer-links { 
+				flex-wrap: wrap !important; 
+			}
+			.footer-item { 
+				flex: 1 1 45% !important; 
+				margin: 0 5px 10px 5px !important;
+			}
+		}
+		
+		/* Ensure responsive behavior for Streamlit elements */
+		@media screen and (max-width: 768px) {
+			/* Force single column layout for all column containers */
+			div[data-testid="column"] {
+				width: 100% !important;
+				min-width: 100% !important;
+				margin-bottom: 1rem !important;
+			}
+			
+			/* Tab container adjustments */
+			.stTabs [data-baseweb="tab-list"] {
+				gap: 0.5rem !important;
+				flex-wrap: wrap !important;
+			}
+			
+			.stTabs [data-baseweb="tab"] {
+				font-size: 12px !important;
+				padding: 0.5rem !important;
+			}
+			
+			/* File uploader */
+			.stFileUploader {
+				margin-bottom: 1rem !important;
+			}
+			
+			/* Expander */
+			.streamlit-expanderHeader {
+				font-size: 13px !important;
+			}
+			
+			/* Progress bars */
+			.dq-progress {
+				height: 6px !important;
+				margin-top: 4px !important;
+			}
+		}
 	</style>
 	""",
 	unsafe_allow_html=True,
