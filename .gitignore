@@ -1,0 +1,26 @@
+# Python
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment / secrets
+.env
+secrets.toml
+
+# Streamlit
+.streamlit/
+
+# Logs and caches
+*.log
+.pytest_cache/
+
+# Data (avoid pushing huge files)
+data/
+*.sqlite
+*.db
+
+# Others
+node_modules/
