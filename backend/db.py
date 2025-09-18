@@ -13,4 +13,12 @@ client = MongoClient(MONGO_URI)
 # Replace with your database name
 db = client["data_quality_dashboard"]
 
+# ✅ Add helper functions so routes.py can import them
+def get_feedback_collection():
+    return db["feedback"]
+
+def get_session_collection():
+    return db["sessions"]
+
+
 
