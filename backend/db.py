@@ -1,36 +1,16 @@
-from typing import Optional
+import os
 from pymongo import MongoClient
-from pymongo.collection import Collection
 
-from backend.config import load_config
+# Get MongoDB connection string from environment variables
+MONGO_URI = os.getenv("MONGO_URI")
 
+if not MONGO_URI:
+    raise ValueError("❌ MONGO_URI environment variable is not set!")
 
-_client: Optional[MongoClient] = None
+# Connect to MongoDB
+client = MongoClient(MONGO_URI)
 
+# Replace with your database name
+db = client["data_quality_dashboard"]
 
-def get_collection() -> Collection:
-	global _client
-	config = load_config()
-	if _client is None:
-		_client = MongoClient(config.mongodb_uri)
-	db = _client[config.database_name]
-	return db[config.collection_name]
-
-
-def get_feedback_collection() -> Collection:
-	global _client
-	config = load_config()
-	if _client is None:
-		_client = MongoClient(config.mongodb_uri)
-	db = _client[config.database_name]
-	return db[config.feedback_collection_name]
-
-
-def get_session_collection() -> Collection:
-	global _client
-	config = load_config()
-	if _client is None:
-		_client = MongoClient(config.mongodb_uri)
-	db = _client[config.database_name]
-	return db[config.session_collection_name]
 
