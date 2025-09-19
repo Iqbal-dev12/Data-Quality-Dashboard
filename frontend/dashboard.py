@@ -632,11 +632,17 @@ with col_center:
 # -------------------------
 # Data load
 # -------------------------
-with st.spinner("Loading data..."):
-	df = fetch_quality_data(api_base_url, start_dt, end_dt)
-
-# If a user uploaded a file, override Overview/Details data with that upload (fully reflective of filters/date range)
+# Check if we have uploaded data
 use_uploaded = bool(st.session_state.get("upload_df") is not None)
+
+if use_uploaded:
+	# Use uploaded data
+	with st.spinner("Processing uploaded data..."):
+		df = pd.DataFrame()  # Will be populated below from uploaded data
+else:
+	# Use default/mock data when no file is uploaded
+	with st.spinner("Loading default data..."):
+		df = fetch_quality_data(api_base_url, start_dt, end_dt)
 if use_uploaded:
 	df_up = st.session_state.get("upload_df").copy()
 	date_col = st.session_state.get("upload_date_col")
@@ -887,12 +893,15 @@ if df.empty:
 	st.stop()
 
 # Derived columns
-	df = df.copy()
-	df["total"] = df[["valid", "warning", "error"]].sum(axis=1)
-	df["dq_score"] = (df["valid"] / df["total"]).fillna(0) * 100
+df = df.copy()
+df["total"] = df[["valid", "warning", "error"]].sum(axis=1)
+df["dq_score"] = (df["valid"] / df["total"]).fillna(0) * 100
+if len(df) > 0:
 	err_mean, err_std = df["error"].mean(), df["error"].std(ddof=0)
 	threshold = err_mean + 2 * (err_std if (err_std and err_std > 0) else 1)
 	df["error_anomaly"] = df["error"] > threshold
+else:
+	df["error_anomaly"] = False
 # Smoothing and month comparison removed per request
 
 # Alert banner based on error rate threshold (latest)
@@ -918,20 +927,14 @@ if latest_error_rate > error_threshold:
 # Generate mock drill-down rows only when no file is uploaded
 # -------------------------
 if not use_uploaded:
-    np.random.seed(42)
-    last_date = pd.to_datetime(df["date"].iloc[-1])
-    num_rows = 200
-    mock_ids = np.arange(1, num_rows + 1)
-    mock_cols = np.random.choice(["Name", "Age", "Salary", "Department", "JoinDate"], size=num_rows)
-    mock_issue = np.random.choice(["missing", "invalid_format", "out_of_range", "duplicate", "ok"], size=num_rows, p=[0.2,0.2,0.2,0.1,0.3])
-    mock_status = np.where(mock_issue=="ok", "valid", np.where(np.isin(mock_issue, ["missing","invalid_format"]) , "warning", "error"))
+    # Create empty rows_df when no file is uploaded to show zeros in all metrics
     rows_df = pd.DataFrame({
-        "date": [last_date]*num_rows,
-        "record_id": mock_ids,
-        "column": mock_cols,
-        "issue": mock_issue,
-        "status": mock_status,
-        "value": np.random.randint(0, 100000, size=num_rows)
+        "date": [],
+        "record_id": [],
+        "column": [],
+        "issue": [],
+        "status": [],
+        "value": []
     })
 
 # Apply filters
@@ -953,8 +956,13 @@ if focus_column:
                 st.stop()
 
 # Extra metrics
-missing_pct = 100.0 * (rows_df["issue"].eq("missing").sum()) / max(1, len(rows_df))
-duplicates_cnt = int((rows_df["issue"].eq("duplicate")).sum())
+if len(rows_df) > 0:
+    missing_pct = 100.0 * (rows_df["issue"].eq("missing").sum()) / max(1, len(rows_df))
+    duplicates_cnt = int((rows_df["issue"].eq("duplicate")).sum())
+else:
+    # When no data is uploaded, show 0 for all metrics
+    missing_pct = 0.0
+    duplicates_cnt = 0
 # Robust last update timestamp from the aggregated time series
 try:
     last_update_ts = pd.to_datetime(df["date"].iloc[-1]) if ("date" in df.columns and len(df) > 0) else pd.to_datetime(datetime.utcnow().date())
@@ -976,6 +984,16 @@ if tab_upload is not None:
 	with tab_upload:
 		st.markdown("<div class='section-title'>Upload a file for quality checks</div>", unsafe_allow_html=True)
 		uploaded = st.file_uploader("Choose CSV, Excel (xlsx), or TXT", type=["csv", "xlsx", "xls", "txt"], accept_multiple_files=False)
+		
+		# Check if file was removed (uploaded is None but we had data before)
+		if uploaded is None and st.session_state.get("upload_df") is not None:
+			# Clear all upload-related session state when file is removed
+			st.session_state.pop("upload_df", None)
+			st.session_state.pop("upload_date_col", None)
+			st.session_state.pop("per_col_filters", None)
+			# Force a rerun to update the UI immediately
+			st.rerun()
+		
 		col_up_left, col_up_right = st.columns([0.6, 0.4])
 		with col_up_right:
 			# Advanced options in collapsible section
@@ -1103,12 +1121,21 @@ if tab_upload is not None:
 with tab_overview:
 	# KPI cards - show 0 when no file uploaded, real data when uploaded
 	if not use_uploaded:
-		# Default values when no CSV uploaded
+		# Default values when no CSV uploaded - all zeros
 		valid_curr = 0
 		warn_curr = 0
 		err_curr = 0
-		total_curr = 1
+		total_curr = 1  # Avoid division by zero
 		dq_curr = 0.0
+		# Create empty dataframe for charts
+		df = pd.DataFrame({
+			"date": [pd.to_datetime(datetime.utcnow().date())],
+			"valid": [0],
+			"warning": [0],
+			"error": [0],
+			"total": [0],
+			"dq_score": [0.0]
+		})
 	else:
 		# Real data from uploaded CSV
 		valid_curr = int(pd.to_numeric(df["valid"], errors="coerce").sum())
