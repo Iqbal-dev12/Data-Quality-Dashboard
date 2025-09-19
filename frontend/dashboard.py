@@ -369,37 +369,141 @@ today = datetime.utcnow().date()
 # Detect uploaded dataset date bounds (if available)
 uploaded_df = st.session_state.get("upload_df") if "upload_df" in st.session_state else None
 uploaded_date_col = st.session_state.get("upload_date_col") if "upload_date_col" in st.session_state else None
+upload_active = uploaded_df is not None
+
+# If upload has been removed, clear any lingering upload-specific state so app resets to defaults
+if not upload_active:
+    if "upload_date_col" in st.session_state:
+        del st.session_state["upload_date_col"]
+    if "per_col_filters" in st.session_state:
+        del st.session_state["per_col_filters"]
 data_min_date = None
 data_max_date = None
-if uploaded_df is not None and uploaded_date_col and uploaded_date_col in uploaded_df.columns:
-	try:
-		_col_dt = pd.to_datetime(uploaded_df[uploaded_date_col], errors="coerce")
-		if _col_dt.notna().any():
-			data_min_date = pd.to_datetime(_col_dt.min()).date()
-			data_max_date = pd.to_datetime(_col_dt.max()).date()
-	except Exception:
-		pass
 
-overall_min = data_min_date if data_min_date is not None else (today - timedelta(days=365))
-overall_max = data_max_date if data_max_date is not None else today
+if uploaded_df is not None:
+    try:
+        # If no date column has been chosen yet, attempt strict auto-detection now
+        if not uploaded_date_col or uploaded_date_col not in uploaded_df.columns:
+            best_col = None
+            best_score = (-1, -1, -1)  # (valid_ratio, unique_days, span_days)
+            for c in uploaded_df.columns:
+                # Skip obvious non-date columns (ids, indices, keys, numeric small ints)
+                name = str(c).lower()
+                if any(token in name for token in ["id", "index", "idx", "key", "pk", "number", "num", "#"]):
+                    continue
+                ser = uploaded_df[c]
+                # Skip numeric columns that are not plausible unix timestamps
+                if pd.api.types.is_numeric_dtype(ser):
+                    non_null = ser.dropna()
+                    if non_null.empty:
+                        continue
+                    sample = non_null.iloc[0]
+                    if sample < 1_000_000_000 or sample > 9_999_999_999:
+                        continue
+                # Try several strict formats first
+                parsed = None
+                for fmt in ('%Y-%m-%d','%m/%d/%Y','%d/%m/%Y','%Y/%m/%d','%m-%d-%Y','%d-%m-%Y','%Y%m%d','%m/%d/%y','%d/%m/%y'):
+                    try:
+                        tmp = pd.to_datetime(ser, format=fmt, errors='coerce')
+                        if tmp.notna().mean() >= 0.8:
+                            parsed = tmp
+                            break
+                    except Exception:
+                        continue
+                # Fallback to pandas parser with strict validation
+                if parsed is None:
+                    tmp = pd.to_datetime(ser, errors='coerce')
+                    if tmp.notna().mean() >= 0.8:
+                        parsed = tmp
+                if parsed is None or parsed.isna().all():
+                    continue
+                valid = parsed.dropna()
+                if valid.empty:
+                    continue
+                min_year = valid.min().year
+                max_year = valid.max().year
+                curr_year = datetime.utcnow().year
+                if not (1900 <= min_year <= curr_year + 1 and 1900 <= max_year <= curr_year + 1):
+                    continue
+                valid_ratio = float(valid.size) / float(len(parsed))
+                unique_days = valid.dt.normalize().nunique()
+                span_days = int((valid.max() - valid.min()).days) if valid.size > 1 else 0
+                score = (valid_ratio, unique_days, span_days)
+                if score > best_score:
+                    best_score = score
+                    best_col = c
+            if best_col:
+                uploaded_date_col = best_col
+                st.session_state.upload_date_col = best_col
 
+        # If we now have a valid date column, compute bounds from it
+        if uploaded_date_col and uploaded_date_col in uploaded_df.columns:
+            series = pd.to_datetime(uploaded_df[uploaded_date_col], errors='coerce').dropna()
+            if not series.empty:
+                data_min_date = series.min().date()
+                data_max_date = series.max().date()
+    except Exception:
+        pass
+
+# Strictly use data bounds if CSV is uploaded, otherwise use reasonable defaults
+if data_min_date is not None and data_max_date is not None:
+	# Use exact data bounds - no extensions or modifications
+	overall_min = data_min_date
+	overall_max = data_max_date
+	# Silently use data bounds without cluttering sidebar
+	pass
+else:
+	# Default range when no CSV uploaded
+	overall_min = today - timedelta(days=365)
+	overall_max = today
+
+# Universal preset logic that works with or without CSV
 if preset == "Last 7 days":
 	default_end = overall_max
-	default_start = max(overall_min, default_end - timedelta(days=6))
+	if data_min_date is not None and data_max_date is not None:
+		# Calculate actual data span
+		data_span_days = (data_max_date - data_min_date).days + 1
+		# If data span is less than 7 days, show all data
+		if data_span_days <= 7:
+			default_start = overall_min
+		else:
+			# Ensure we don't go before the data starts
+			calculated_start = default_end - timedelta(days=6)
+			default_start = max(overall_min, calculated_start)
+	else:
+		# Default case: show last 7 days from overall_max
+		default_start = max(overall_min, default_end - timedelta(days=6))
+
 elif preset == "Last 30 days":
 	default_end = overall_max
-	default_start = max(overall_min, default_end - timedelta(days=29))
-else:
-	default_start = overall_min
-	default_end = overall_max
+	if data_min_date is not None and data_max_date is not None:
+		# Calculate actual data span
+		data_span_days = (data_max_date - data_min_date).days + 1
+		# If data span is less than 30 days, show all data
+		if data_span_days <= 30:
+			default_start = overall_min
+		else:
+			# Ensure we don't go before the data starts
+			calculated_start = default_end - timedelta(days=29)
+			default_start = max(overall_min, calculated_start)
+	else:
+		# Default case: show last 30 days from overall_max
+		default_start = max(overall_min, default_end - timedelta(days=29))
+
+else:  # Custom
+    default_start = overall_min
+    default_end = overall_max
 
 if preset == "Custom":
-	date_range = st.sidebar.date_input(
-		"Date Range",
-		value=(default_start, default_end),
-		min_value=overall_min,
-		max_value=overall_max,
-	)
+    # Use a different widget key depending on whether an upload is active to force reset when CSV is removed
+    date_widget_key = "date_range_uploaded" if upload_active else "date_range_default"
+    date_range = st.sidebar.date_input(
+        "Date Range",
+        value=(default_start, default_end),
+        min_value=overall_min,
+        max_value=overall_max,
+        key=date_widget_key,
+    )
 
 # Authoritative start/end based on preset (Custom uses widget)
 if preset == "Custom":
@@ -411,6 +515,7 @@ if preset == "Custom":
 else:
 	start_dt = default_start
 	end_dt = default_end
+
 # normalize to full-day bounds
 start_dt = datetime.combine(start_dt, datetime.min.time())
 end_dt = datetime.combine(end_dt, datetime.max.time())
@@ -540,17 +645,89 @@ if use_uploaded:
 		try:
 			candidates = []
 			for c in df_up.columns:
+				# Skip columns that are likely IDs or numeric indices
+				col_name_lower = str(c).lower()
+				if any(skip_word in col_name_lower for skip_word in ['id', 'index', 'idx', 'key', 'pk', 'number', 'num', '#']):
+					continue
+				
 				ser = df_up[c]
-				parsed = pd.to_datetime(ser, errors="coerce")
-				valid_ratio = float(parsed.notna().mean()) if len(parsed) else 0.0
-				unique_days = parsed.dt.normalize().nunique() if parsed.notna().any() else 0
-				if valid_ratio >= 0.5 and unique_days >= 2:
-					candidates.append((c, valid_ratio, unique_days))
+				
+				# Skip if column is purely numeric (likely not dates)
+				if pd.api.types.is_numeric_dtype(ser):
+					# Check if it could be timestamps (large numbers)
+					if ser.notna().any():
+						sample_val = ser.dropna().iloc[0] if len(ser.dropna()) > 0 else 0
+						# Skip if values are too small (likely IDs) or too large (likely not dates)
+						if sample_val < 1000000000 or sample_val > 9999999999:  # Not Unix timestamp range
+							continue
+				
+				# Try robust date parsing with strict validation
+				parsed = None
+				successful_format = None
+				
+				# Try specific date formats first
+				date_formats = [
+					'%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y/%m/%d', 
+					'%m-%d-%Y', '%d-%m-%Y', '%Y%m%d', '%m/%d/%y', '%d/%m/%y'
+				]
+				
+				for fmt in date_formats:
+					try:
+						test_parsed = pd.to_datetime(ser, format=fmt, errors="coerce")
+						valid_count = test_parsed.notna().sum()
+						
+						if valid_count > len(ser) * 0.7:  # At least 70% valid
+							# Validate year range
+							valid_dates = test_parsed.dropna()
+							if len(valid_dates) > 0:
+								min_year = valid_dates.min().year
+								max_year = valid_dates.max().year
+								current_year = datetime.now().year
+								
+								# Strict year validation
+								if 1900 <= min_year <= current_year + 1 and 1900 <= max_year <= current_year + 1:
+									parsed = test_parsed
+									successful_format = fmt
+									break
+					except:
+						continue
+				
+				# If specific formats failed, try auto-detection with strict validation
+				if parsed is None or parsed.isna().all():
+					try:
+						test_parsed = pd.to_datetime(ser, errors="coerce")
+						valid_dates = test_parsed.dropna()
+						if len(valid_dates) > len(ser) * 0.7:
+							min_year = valid_dates.min().year
+							max_year = valid_dates.max().year
+							current_year = datetime.now().year
+							
+							# Very strict validation for auto-detection
+							if 1900 <= min_year <= current_year + 1 and 1900 <= max_year <= current_year + 1:
+								parsed = test_parsed
+								successful_format = "auto"
+					except:
+						pass
+				
+				if parsed is not None and not parsed.isna().all():
+					valid_ratio = float(parsed.notna().mean()) if len(parsed) else 0.0
+					unique_days = parsed.dt.normalize().nunique() if parsed.notna().any() else 0
+					
+					# Strict criteria for date column detection
+					if valid_ratio >= 0.8 and unique_days >= 2:  # 80% valid, at least 2 unique days
+						# Calculate date range span for scoring
+						if parsed.notna().any():
+							date_span_days = (parsed.max() - parsed.min()).days if parsed.notna().sum() > 1 else 0
+							candidates.append((c, valid_ratio, unique_days, date_span_days))
+			
 			if candidates:
-				candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
+				# Sort by valid_ratio first, then unique_days, then date_span
+				candidates.sort(key=lambda x: (x[1], x[2], x[3]), reverse=True)
 				date_col = candidates[0][0]
 				# persist detection
 				st.session_state.upload_date_col = date_col
+				
+				# Silently detect date range without showing confusing message
 		except Exception:
 			pass
 
@@ -600,21 +777,49 @@ if use_uploaded:
 		if filtered_df.empty:
 			st.warning("No rows match current filters/date range for the uploaded file.")
 			st.stop()
-		# Aggregate by day
-		agg = pd.DataFrame({
-			"date": pd.to_datetime(filtered_df[date_col]).dt.normalize(),
-			"valid": valid_mask.astype(int),
-			"warning": warning_mask.astype(int),
-			"error": error_mask.astype(int),
-		})
-		df = agg.groupby("date", as_index=False).sum().sort_values("date")
-		# Apply date range from sidebar (respect presets)
+		# Apply date range filter to filtered_df first, then aggregate
 		start_norm = pd.to_datetime(start_dt).normalize()
 		end_norm = pd.to_datetime(end_dt).normalize() + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
-		df = df[(df["date"] >= start_norm) & (df["date"] <= end_norm)]
-		if df.empty:
-			st.warning("No data points in the selected date range for the uploaded file.")
+		
+		# Debug: Show what we're filtering for
+		data_dates = pd.to_datetime(filtered_df[date_col]).dt.normalize()
+		data_min = data_dates.min()
+		data_max = data_dates.max()
+		
+		# More robust date filtering
+		date_filtered_df = filtered_df[
+			(data_dates >= start_norm) & (data_dates <= end_norm)
+		]
+		
+		if date_filtered_df.empty:
+			st.error(f"""
+			**No data points in the selected date range:**
+			- **Requested range**: {start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}
+			- **Available data range**: {data_min.strftime('%Y-%m-%d')} to {data_max.strftime('%Y-%m-%d')}
+			- **Total rows in CSV**: {len(filtered_df):,}
+			
+			**Suggestion**: Try selecting "Custom" and choose dates within your data range.
+			""")
 			st.stop()
+		
+		# Recalculate masks for date-filtered data
+		dup_mask_filtered = date_filtered_df.duplicated(keep=False)
+		if quality_cols:
+			missing_mask_filtered = date_filtered_df[quality_cols].isna().any(axis=1)
+		else:
+			missing_mask_filtered = date_filtered_df.isna().any(axis=1)
+		warning_mask_filtered = missing_mask_filtered & (~dup_mask_filtered)
+		error_mask_filtered = dup_mask_filtered
+		valid_mask_filtered = ~(warning_mask_filtered | error_mask_filtered)
+		
+		# Aggregate by day
+		agg = pd.DataFrame({
+			"date": pd.to_datetime(date_filtered_df[date_col]).dt.normalize(),
+			"valid": valid_mask_filtered.astype(int),
+			"warning": warning_mask_filtered.astype(int),
+			"error": error_mask_filtered.astype(int),
+		})
+		df = agg.groupby("date", as_index=False).sum().sort_values("date")
 	else:
 		# Single snapshot (no date column)
 		valid_count = int(valid_mask.sum())
@@ -623,29 +828,40 @@ if use_uploaded:
 		_snapshot_date = pd.to_datetime(datetime.utcnow().date())
 		df = pd.DataFrame([{ "date": _snapshot_date, "valid": valid_count, "warning": warning_count, "error": error_count }])
 
-	# Rebuild rows_df for Details based on filtered_df
-	rows_df = filtered_df.copy()
-	rows_df["status"] = np.where(error_mask, "error", np.where(warning_mask, "warning", "valid"))
-	rows_df["record_id"] = np.arange(1, len(rows_df) + 1)
-	# Identify first missing column per row within quality_cols (vectorized)
-	if quality_cols:
-		miss_mask = filtered_df[quality_cols].isna()
-		first_missing_series = pd.Series(index=filtered_df.index, dtype=object)
-		any_missing = miss_mask.any(axis=1)
-		if any_missing.any():
-			first_missing_series.loc[any_missing] = miss_mask.loc[any_missing].idxmax(axis=1)
+	# Rebuild rows_df for Details based on date-filtered data if available
+	if date_col and date_col in filtered_df.columns and 'date_filtered_df' in locals():
+		# Use the date-filtered data for consistency with overview
+		rows_df = date_filtered_df.copy()
+		rows_df["status"] = np.where(error_mask_filtered, "error", np.where(warning_mask_filtered, "warning", "valid"))
+		rows_df["record_id"] = np.arange(1, len(rows_df) + 1)
+		# Identify first missing column per row within quality_cols (vectorized)
+		if quality_cols:
+			miss_mask = date_filtered_df[quality_cols].isna()
+			first_missing_series = pd.Series(index=date_filtered_df.index, dtype=object)
+			any_missing = miss_mask.any(axis=1)
+			if any_missing.any():
+				first_missing_series.loc[any_missing] = miss_mask.loc[any_missing].idxmax(axis=1)
+		else:
+			first_missing_series = pd.Series(index=date_filtered_df.index, dtype=object)
+		rows_df["column"] = first_missing_series
+		rows_df["issue"] = np.where(error_mask_filtered, "duplicate", np.where(warning_mask_filtered, "missing", "ok"))
+		rows_df["date"] = pd.to_datetime(date_filtered_df[date_col]).dt.normalize()
 	else:
-		first_missing_series = pd.Series(index=filtered_df.index, dtype=object)
-	rows_df["column"] = first_missing_series
-	rows_df["issue"] = np.where(error_mask, "duplicate", np.where(warning_mask, "missing", "ok"))
-	# If date column exists keep it for details; else set snapshot date
-	if date_col and date_col in filtered_df.columns:
-		rows_df["date"] = pd.to_datetime(filtered_df[date_col]).dt.normalize()
-		# Apply date range to rows_df too
-		start_norm = pd.to_datetime(start_dt).normalize()
-		end_norm = pd.to_datetime(end_dt).normalize() + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
-		rows_df = rows_df[(rows_df["date"] >= start_norm) & (rows_df["date"] <= end_norm)]
-	else:
+		# Fallback to original logic for non-date or single snapshot data
+		rows_df = filtered_df.copy()
+		rows_df["status"] = np.where(error_mask, "error", np.where(warning_mask, "warning", "valid"))
+		rows_df["record_id"] = np.arange(1, len(rows_df) + 1)
+		# Identify first missing column per row within quality_cols (vectorized)
+		if quality_cols:
+			miss_mask = filtered_df[quality_cols].isna()
+			first_missing_series = pd.Series(index=filtered_df.index, dtype=object)
+			any_missing = miss_mask.any(axis=1)
+			if any_missing.any():
+				first_missing_series.loc[any_missing] = miss_mask.loc[any_missing].idxmax(axis=1)
+		else:
+			first_missing_series = pd.Series(index=filtered_df.index, dtype=object)
+		rows_df["column"] = first_missing_series
+		rows_df["issue"] = np.where(error_mask, "duplicate", np.where(warning_mask, "missing", "ok"))
 		rows_df["date"] = df["date"].iloc[-1] if len(df)>0 else pd.to_datetime(datetime.utcnow().date())
 	if "value" not in rows_df.columns:
 		rows_df["value"] = ""
@@ -999,30 +1215,71 @@ with tab_overview:
 	# Trend area (Plotly optional)
 	lc, rc = st.columns([0.62, 0.38])
 	with lc:
-		st.markdown("<div class='section-title'>Data Quality Trend</div>", unsafe_allow_html=True)
+		# Show the actual date range being displayed
+		date_range_text = f"({start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')})"
+		st.markdown(f"<div class='section-title'>Data Quality Trend {date_range_text}</div>", unsafe_allow_html=True)
 		if plotly_mode and px is not None:
 			melted = df.melt(id_vars=["date"], value_vars=["valid","warning","error"], var_name="metric", value_name="count")
 			fig_pl = px.line(melted, x="date", y="count", color="metric",
 				color_discrete_map={"valid":"#10b981","warning":"#f59e0b","error":"#ef4444"},
 				template="plotly_dark")
-			# Respect Show data points: toggle markers on/off
-			fig_pl.update_traces(mode="lines+markers" if show_points else "lines", marker=dict(size=6 if show_points else 0))
-			fig_pl.update_layout(margin=dict(l=10,r=10,t=10,b=40), legend_orientation="h", legend_y=-0.2)
+			# Fix data points display - proper marker configuration
+			if show_points:
+				fig_pl.update_traces(mode="lines+markers", marker=dict(size=8, opacity=0.8))
+			else:
+				fig_pl.update_traces(mode="lines", marker=dict(size=0))
+			
+			# Improve layout and date formatting
+			fig_pl.update_layout(
+				margin=dict(l=10,r=10,t=10,b=40), 
+				legend_orientation="h", 
+				legend_y=-0.2,
+				xaxis_title="Date",
+				yaxis_title="Count",
+				hovermode='x unified'
+			)
+			# Format x-axis dates properly
+			fig_pl.update_xaxes(tickformat="%Y-%m-%d", tickangle=45)
 			st.plotly_chart(fig_pl, use_container_width=True)
 		else:
 			fig, ax = plt.subplots(figsize=(9.2, 4.0))
-			ax.plot(df["date"], df["valid"], label="Valid", color="#10b981", linewidth=2.2, marker="o" if show_points else None, markersize=4, alpha=0.95)
-			ax.plot(df["date"], df["warning"], label="Warnings", color="#f59e0b", linewidth=2.0, marker="o" if show_points else None, markersize=4, alpha=0.95)
-			ax.plot(df["date"], df["error"], label="Errors", color="#ef4444", linewidth=2.0, marker="o" if show_points else None, markersize=4, alpha=0.95)
+			# Fix marker display - use consistent marker settings
+			marker_style = "o" if show_points else None
+			marker_size = 6 if show_points else 0
+			marker_alpha = 0.9 if show_points else 0
+			
+			ax.plot(df["date"], df["valid"], label="Valid", color="#10b981", 
+				   linewidth=2.2, marker=marker_style, markersize=marker_size, 
+				   alpha=0.95, markerfacecolor="#10b981", markeredgecolor="white", 
+				   markeredgewidth=0.5 if show_points else 0)
+			ax.plot(df["date"], df["warning"], label="Warnings", color="#f59e0b", 
+				   linewidth=2.0, marker=marker_style, markersize=marker_size, 
+				   alpha=0.95, markerfacecolor="#f59e0b", markeredgecolor="white", 
+				   markeredgewidth=0.5 if show_points else 0)
+			ax.plot(df["date"], df["error"], label="Errors", color="#ef4444", 
+				   linewidth=2.0, marker=marker_style, markersize=marker_size, 
+				   alpha=0.95, markerfacecolor="#ef4444", markeredgecolor="white", 
+				   markeredgewidth=0.5 if show_points else 0)
+			
+			# Error anomalies (only show if not already showing all points)
 			anom = df[df["error_anomaly"]] if "error_anomaly" in df.columns else df.iloc[0:0]
-			if not anom.empty:
-				ax.scatter(anom["date"], anom["error"], color="#ef4444", s=28, zorder=5, label="Error anomaly")
-			ax.set_xlabel("")
+			if not anom.empty and not show_points:
+				ax.scatter(anom["date"], anom["error"], color="#ef4444", s=40, 
+					  zorder=5, label="Error anomaly", alpha=0.8, edgecolors="white")
+			
+			ax.set_xlabel("Date")
 			ax.set_ylabel("Count")
 			ax.grid(True, linestyle="--", alpha=0.25)
+			
+			# Improve date formatting on x-axis
+			import matplotlib.dates as mdates
+			ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+			ax.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(df)//10)))
+			plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+			
 			for spine in ["top", "right"]:
 				ax.spines[spine].set_visible(False)
-			ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, frameon=False)
+			ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=3, frameon=False)
 			plt.tight_layout()
 			st.pyplot(fig, use_container_width=True)
 			buf = io.BytesIO(); fig.savefig(buf, format="png", bbox_inches="tight", dpi=200)
