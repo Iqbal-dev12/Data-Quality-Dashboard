@@ -535,6 +535,37 @@ column_filter = st.sidebar.multiselect(
 )
 focus_column = st.sidebar.text_input("Column to focus (optional)", value="")
 
+# Duplicate detection controls with smart suggestions
+id_options = ["All columns (default)"]
+if _uploaded_cols:
+	# Smart detection of likely ID columns
+	likely_id_cols = []
+	other_cols = []
+	
+	for col in _uploaded_cols:
+		col_lower = str(col).lower()
+		# Check if column name suggests it's an ID
+		if any(id_word in col_lower for id_word in ['id', 'key', 'pk', 'primary', 'unique', 'identifier']):
+			likely_id_cols.append(f"🔑 {col}")  # Add key emoji for ID columns
+		else:
+			other_cols.append(col)
+	
+	# Add likely ID columns first, then others
+	id_options.extend(likely_id_cols + other_cols)
+else:
+	id_options.extend(_default_cols)
+
+duplicate_id_column = st.sidebar.selectbox(
+	"ID column for duplicate detection",
+	options=id_options,
+	index=0,
+	help="Select which column to use as ID for duplicate detection. 'All columns' checks entire rows. 🔑 indicates likely ID columns."
+)
+
+# Clean the column name (remove emoji if present)
+if duplicate_id_column.startswith("🔑 "):
+	duplicate_id_column = duplicate_id_column[2:]
+
 # Chart controls
 show_points = st.sidebar.checkbox("Show data points", value=False)
 plotly_mode = st.sidebar.checkbox("Interactive charts (Plotly)", value=bool(px))
@@ -764,7 +795,16 @@ if use_uploaded:
 			st.stop()
 
 	# Classification on filtered rows
-	dup_mask = filtered_df.duplicated(keep=False)
+	# Duplicate detection based on selected ID column or all columns
+	if duplicate_id_column == "All columns (default)":
+		dup_mask = filtered_df.duplicated(keep=False)
+	else:
+		if duplicate_id_column in filtered_df.columns:
+			# Check for duplicates based on the selected ID column only
+			dup_mask = filtered_df.duplicated(subset=[duplicate_id_column], keep=False)
+		else:
+			# Fallback to all columns if selected column doesn't exist
+			dup_mask = filtered_df.duplicated(keep=False)
 	# Warnings: missing in quality_cols only
 	if quality_cols:
 		missing_mask = filtered_df[quality_cols].isna().any(axis=1)
@@ -809,7 +849,14 @@ if use_uploaded:
 			st.stop()
 		
 		# Recalculate masks for date-filtered data
-		dup_mask_filtered = date_filtered_df.duplicated(keep=False)
+		# Apply same duplicate detection logic to date-filtered data
+		if duplicate_id_column == "All columns (default)":
+			dup_mask_filtered = date_filtered_df.duplicated(keep=False)
+		else:
+			if duplicate_id_column in date_filtered_df.columns:
+				dup_mask_filtered = date_filtered_df.duplicated(subset=[duplicate_id_column], keep=False)
+			else:
+				dup_mask_filtered = date_filtered_df.duplicated(keep=False)
 		if quality_cols:
 			missing_mask_filtered = date_filtered_df[quality_cols].isna().any(axis=1)
 		else:
@@ -1055,7 +1102,14 @@ if tab_upload is not None:
 					# Limit calculations for very large files
 					calc_df = df_up.head(10000) if n_rows > 10000 else df_up
 					missing_total = int(calc_df.isna().sum().sum())
-					dup_count = int(calc_df.duplicated().sum())
+					# Calculate duplicate count based on selected method
+					if duplicate_id_column == "All columns (default)":
+						dup_count = int(calc_df.duplicated().sum())
+					else:
+						if duplicate_id_column in calc_df.columns:
+							dup_count = int(calc_df.duplicated(subset=[duplicate_id_column]).sum())
+						else:
+							dup_count = int(calc_df.duplicated().sum())
 					if n_rows > 10000:
 						# Scale up the estimates
 						missing_total = int(missing_total * (n_rows / 10000))
@@ -1101,14 +1155,31 @@ if tab_upload is not None:
 					# Duplicates sample - optimized
 					if dup_count > 0:
 						st.markdown("<div class='section-title'>Duplicate rows (sample)</div>", unsafe_allow_html=True)
-						dups = calc_df[calc_df.duplicated(keep=False)].head(25)
+						# Show duplicate samples based on selected method
+						if duplicate_id_column == "All columns (default)":
+							dups = calc_df[calc_df.duplicated(keep=False)].head(25)
+						else:
+							if duplicate_id_column in calc_df.columns:
+								dups = calc_df[calc_df.duplicated(subset=[duplicate_id_column], keep=False)].head(25)
+							else:
+								dups = calc_df[calc_df.duplicated(keep=False)].head(25)
 						st.dataframe(dups, use_container_width=True, hide_index=True)
 
 					# Exports
 					st.markdown("<div class='section-title'>Download quality report</div>", unsafe_allow_html=True)
 					csv_miss = miss_col_sorted.to_csv(index=False).encode("utf-8")
 					csv_prof = profile_df.to_csv(index=False).encode("utf-8")
-					csv_dups = (df_up[df_up.duplicated(keep=False)]).to_csv(index=False).encode("utf-8") if dup_count>0 else b""
+					# Generate CSV export based on selected duplicate detection method
+					if dup_count > 0:
+						if duplicate_id_column == "All columns (default)":
+							csv_dups = (df_up[df_up.duplicated(keep=False)]).to_csv(index=False).encode("utf-8")
+						else:
+							if duplicate_id_column in df_up.columns:
+								csv_dups = (df_up[df_up.duplicated(subset=[duplicate_id_column], keep=False)]).to_csv(index=False).encode("utf-8")
+							else:
+								csv_dups = (df_up[df_up.duplicated(keep=False)]).to_csv(index=False).encode("utf-8")
+					else:
+						csv_dups = b""
 					b1, b2, b3 = st.columns(3)
 					with b1:
 						st.download_button("Missing by column (CSV)", data=csv_miss, file_name="missing_by_column.csv", mime="text/csv")
@@ -1239,111 +1310,237 @@ with tab_overview:
 
 	st.write("")
 
-	# Trend area (Plotly optional)
+	# Trend area (Plotly optional) - Robust version with error handling
 	lc, rc = st.columns([0.62, 0.38])
 	with lc:
 		# Show the actual date range being displayed
 		date_range_text = f"({start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')})"
 		st.markdown(f"<div class='section-title'>Data Quality Trend {date_range_text}</div>", unsafe_allow_html=True)
-		if plotly_mode and px is not None:
-			melted = df.melt(id_vars=["date"], value_vars=["valid","warning","error"], var_name="metric", value_name="count")
-			fig_pl = px.line(melted, x="date", y="count", color="metric",
-				color_discrete_map={"valid":"#10b981","warning":"#f59e0b","error":"#ef4444"},
-				template="plotly_dark")
-			# Fix data points display - proper marker configuration
-			if show_points:
-				fig_pl.update_traces(mode="lines+markers", marker=dict(size=8, opacity=0.8))
+		
+		# Robust data validation and preparation
+		try:
+			# Ensure df exists and has required columns
+			if df is None or df.empty:
+				st.info("No data available for the selected date range to display trend chart.")
 			else:
-				fig_pl.update_traces(mode="lines", marker=dict(size=0))
-			
-			# Improve layout and date formatting
-			fig_pl.update_layout(
-				margin=dict(l=10,r=10,t=10,b=40), 
-				legend_orientation="h", 
-				legend_y=-0.2,
-				xaxis_title="Date",
-				yaxis_title="Count",
-				hovermode='x unified'
-			)
-			# Format x-axis dates properly
-			fig_pl.update_xaxes(tickformat="%Y-%m-%d", tickangle=45)
-			st.plotly_chart(fig_pl, use_container_width=True)
-		else:
-			fig, ax = plt.subplots(figsize=(9.2, 4.0))
-			# Fix marker display - use consistent marker settings
-			marker_style = "o" if show_points else None
-			marker_size = 6 if show_points else 0
-			marker_alpha = 0.9 if show_points else 0
-			
-			ax.plot(df["date"], df["valid"], label="Valid", color="#10b981", 
-				   linewidth=2.2, marker=marker_style, markersize=marker_size, 
-				   alpha=0.95, markerfacecolor="#10b981", markeredgecolor="white", 
-				   markeredgewidth=0.5 if show_points else 0)
-			ax.plot(df["date"], df["warning"], label="Warnings", color="#f59e0b", 
-				   linewidth=2.0, marker=marker_style, markersize=marker_size, 
-				   alpha=0.95, markerfacecolor="#f59e0b", markeredgecolor="white", 
-				   markeredgewidth=0.5 if show_points else 0)
-			ax.plot(df["date"], df["error"], label="Errors", color="#ef4444", 
-				   linewidth=2.0, marker=marker_style, markersize=marker_size, 
-				   alpha=0.95, markerfacecolor="#ef4444", markeredgecolor="white", 
-				   markeredgewidth=0.5 if show_points else 0)
-			
-			# Error anomalies (only show if not already showing all points)
-			anom = df[df["error_anomaly"]] if "error_anomaly" in df.columns else df.iloc[0:0]
-			if not anom.empty and not show_points:
-				ax.scatter(anom["date"], anom["error"], color="#ef4444", s=40, 
-					  zorder=5, label="Error anomaly", alpha=0.8, edgecolors="white")
-			
-			ax.set_xlabel("Date")
-			ax.set_ylabel("Count")
-			ax.grid(True, linestyle="--", alpha=0.25)
-			
-			# Improve date formatting on x-axis
-			import matplotlib.dates as mdates
-			ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-			ax.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(df)//10)))
-			plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
-			
-			for spine in ["top", "right"]:
-				ax.spines[spine].set_visible(False)
-			ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=3, frameon=False)
-			plt.tight_layout()
-			st.pyplot(fig, use_container_width=True)
-			buf = io.BytesIO(); fig.savefig(buf, format="png", bbox_inches="tight", dpi=200)
-			st.download_button("Download Trend PNG", data=buf.getvalue(), file_name="trend.png", mime="image/png")
+				# Ensure required columns exist with default values
+				required_cols = ["date", "valid", "warning", "error"]
+				for col in required_cols:
+					if col not in df.columns:
+						if col == "date":
+							df[col] = pd.to_datetime(datetime.utcnow().date())
+						else:
+							df[col] = 0
+				
+				# Clean and validate data
+				chart_df = df.copy()
+				
+				# Ensure date column is datetime
+				if not pd.api.types.is_datetime64_any_dtype(chart_df["date"]):
+					chart_df["date"] = pd.to_datetime(chart_df["date"], errors="coerce")
+				
+				# Remove rows with invalid dates
+				chart_df = chart_df.dropna(subset=["date"])
+				
+				# Fill NaN values in numeric columns with 0
+				numeric_cols = ["valid", "warning", "error"]
+				for col in numeric_cols:
+					chart_df[col] = pd.to_numeric(chart_df[col], errors="coerce").fillna(0)
+				
+				# Ensure we have at least one data point
+				if chart_df.empty:
+					st.info("No valid data points available for trend chart.")
+				else:
+					# Sort by date for proper line chart
+					chart_df = chart_df.sort_values("date")
+					
+					# Plotly chart (preferred)
+					if plotly_mode and px is not None:
+						try:
+							melted = chart_df.melt(id_vars=["date"], value_vars=["valid","warning","error"], var_name="metric", value_name="count")
+							fig_pl = px.line(melted, x="date", y="count", color="metric",
+								color_discrete_map={"valid":"#10b981","warning":"#f59e0b","error":"#ef4444"},
+								template="plotly_dark")
+							
+							# Configure markers
+							if show_points:
+								fig_pl.update_traces(mode="lines+markers", marker=dict(size=8, opacity=0.8))
+							else:
+								fig_pl.update_traces(mode="lines")
+							
+							# Improve layout and date formatting
+							fig_pl.update_layout(
+								margin=dict(l=10,r=10,t=10,b=40), 
+								legend=dict(orientation="h", y=-0.2),
+								xaxis_title="Date",
+								yaxis_title="Count",
+								hovermode='x unified'
+							)
+							# Format x-axis dates properly
+							fig_pl.update_xaxes(tickformat="%Y-%m-%d", tickangle=45)
+							st.plotly_chart(fig_pl, use_container_width=True)
+						except Exception as e:
+							st.error(f"Error creating Plotly chart: {str(e)}")
+							# Fall back to matplotlib
+							plotly_mode = False
+					
+					# Matplotlib chart (fallback or default)
+					if not plotly_mode or px is None:
+						try:
+							import matplotlib.dates as mdates
+							
+							fig, ax = plt.subplots(figsize=(9.2, 4.0))
+							
+							# Configure markers
+							marker_style = "o" if show_points else None
+							marker_size = 6 if show_points else 0
+							
+							# Plot lines with error handling
+							ax.plot(chart_df["date"], chart_df["valid"], label="Valid", color="#10b981", 
+								   linewidth=2.2, marker=marker_style, markersize=marker_size, 
+								   alpha=0.95, markerfacecolor="#10b981", markeredgecolor="white", 
+								   markeredgewidth=0.5 if show_points else 0)
+							ax.plot(chart_df["date"], chart_df["warning"], label="Warnings", color="#f59e0b", 
+								   linewidth=2.0, marker=marker_style, markersize=marker_size, 
+								   alpha=0.95, markerfacecolor="#f59e0b", markeredgecolor="white", 
+								   markeredgewidth=0.5 if show_points else 0)
+							ax.plot(chart_df["date"], chart_df["error"], label="Errors", color="#ef4444", 
+								   linewidth=2.0, marker=marker_style, markersize=marker_size, 
+								   alpha=0.95, markerfacecolor="#ef4444", markeredgecolor="white", 
+								   markeredgewidth=0.5 if show_points else 0)
+							
+							# Error anomalies (only show if not already showing all points)
+							if "error_anomaly" in chart_df.columns and not show_points:
+								anom = chart_df[chart_df["error_anomaly"] == True]
+								if not anom.empty:
+									ax.scatter(anom["date"], anom["error"], color="#ef4444", s=40, 
+										  zorder=5, label="Error anomaly", alpha=0.8, edgecolors="white")
+							
+							# Styling
+							ax.set_xlabel("Date")
+							ax.set_ylabel("Count")
+							ax.grid(True, linestyle="--", alpha=0.25)
+							
+							# Date formatting with safe interval calculation
+							try:
+								date_interval = max(1, len(chart_df) // 10) if len(chart_df) > 10 else 1
+								ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+								ax.xaxis.set_major_locator(mdates.DayLocator(interval=date_interval))
+								plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+							except Exception:
+								# Fallback to simple date formatting
+								ax.tick_params(axis='x', rotation=45)
+							
+							# Remove top and right spines
+							for spine in ["top", "right"]:
+								ax.spines[spine].set_visible(False)
+							
+							# Legend
+							ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=3, frameon=False)
+							plt.tight_layout()
+							
+							# Display chart
+							st.pyplot(fig, use_container_width=True)
+							
+							# Download button
+							try:
+								buf = io.BytesIO()
+								fig.savefig(buf, format="png", bbox_inches="tight", dpi=200)
+								st.download_button("Download Trend PNG", data=buf.getvalue(), file_name="trend.png", mime="image/png")
+							except Exception:
+								pass  # Download button is optional
+							
+							# Clean up
+							plt.close(fig)
+							
+						except Exception as e:
+							st.error(f"Error creating chart: {str(e)}")
+							st.info("Unable to display trend chart. Please check your data format.")
+		
+		except Exception as e:
+			st.error(f"Error processing chart data: {str(e)}")
+			st.info("Unable to display trend chart. Please try uploading your data again.")
 
 	with rc:
 		st.markdown("<div class='section-title'>Latest Composition</div>", unsafe_allow_html=True)
-		# Sanitize composition values to avoid NaN/None and negatives
-		vals_raw = [valid_curr, warn_curr, err_curr]
-		comp_values = []
-		for v in vals_raw:
-			try:
-				fv = float(v) if v is not None else 0.0
-			except Exception:
-				fv = 0.0
-			comp_values.append(max(0.0, 0.0 if pd.isna(fv) else fv))
-		total_comp = sum(comp_values)
-		labels = ["Valid", "Warnings", "Errors"]
-		colors = ["#10b981", "#f59e0b", "#ef4444"]
-		if total_comp <= 0:
-			st.info("No composition data to display for the current filters/date range.")
-		else:
-			fig2, ax2 = plt.subplots(figsize=(4.8, 4.8))
-			wedges = ax2.pie(
-				comp_values,
-				colors=colors,
-				startangle=90,
-				counterclock=False,
-				explode=[0.03, 0.03, 0.03],
-				wedgeprops=dict(width=0.5, edgecolor="#0c1326", linewidth=2),
-			)[0]
-			ax2.axis('equal')
-			ax2.legend(wedges, labels, title="Categories", loc="center left", bbox_to_anchor=(1.15, 0.5), frameon=False)
-			plt.tight_layout()
-			st.pyplot(fig2, use_container_width=True)
-			buf2 = io.BytesIO(); fig2.savefig(buf2, format="png", bbox_inches="tight", dpi=200)
-			st.download_button("Download Composition PNG", data=buf2.getvalue(), file_name="composition.png", mime="image/png")
+		
+		# Robust composition chart with error handling
+		try:
+			# Sanitize composition values to avoid NaN/None and negatives
+			vals_raw = [valid_curr, warn_curr, err_curr]
+			comp_values = []
+			for v in vals_raw:
+				try:
+					fv = float(v) if v is not None else 0.0
+				except Exception:
+					fv = 0.0
+				comp_values.append(max(0.0, 0.0 if pd.isna(fv) else fv))
+			
+			total_comp = sum(comp_values)
+			labels = ["Valid", "Warnings", "Errors"]
+			colors = ["#10b981", "#f59e0b", "#ef4444"]
+			
+			if total_comp <= 0:
+				st.info("No composition data to display for the current filters/date range.")
+			else:
+				try:
+					# Filter out zero values for cleaner pie chart
+					non_zero_values = []
+					non_zero_labels = []
+					non_zero_colors = []
+					
+					for i, val in enumerate(comp_values):
+						if val > 0:
+							non_zero_values.append(val)
+							non_zero_labels.append(labels[i])
+							non_zero_colors.append(colors[i])
+					
+					if not non_zero_values:
+						st.info("No data to display in composition chart.")
+					else:
+						fig2, ax2 = plt.subplots(figsize=(4.8, 4.8))
+						
+						# Create pie chart with only non-zero values
+						wedges = ax2.pie(
+							non_zero_values,
+							labels=non_zero_labels,
+							colors=non_zero_colors,
+							startangle=90,
+							counterclock=False,
+							explode=[0.03] * len(non_zero_values),
+							wedgeprops=dict(width=0.5, edgecolor="#0c1326", linewidth=2),
+							autopct='%1.1f%%'
+						)[0]
+						
+						ax2.axis('equal')
+						
+						# Add legend only if we have multiple categories
+						if len(non_zero_values) > 1:
+							ax2.legend(wedges, non_zero_labels, title="Categories", 
+									 loc="center left", bbox_to_anchor=(1.15, 0.5), frameon=False)
+						
+						plt.tight_layout()
+						st.pyplot(fig2, use_container_width=True)
+						
+						# Download button with error handling
+						try:
+							buf2 = io.BytesIO()
+							fig2.savefig(buf2, format="png", bbox_inches="tight", dpi=200)
+							st.download_button("Download Composition PNG", data=buf2.getvalue(), 
+											 file_name="composition.png", mime="image/png")
+						except Exception:
+							pass  # Download button is optional
+						
+						# Clean up
+						plt.close(fig2)
+						
+				except Exception as e:
+					st.error(f"Error creating composition chart: {str(e)}")
+					st.info("Unable to display composition chart.")
+		
+		except Exception as e:
+			st.error(f"Error processing composition data: {str(e)}")
+			st.info("Unable to display composition chart.")
 
 with tab_details:
 	if not use_uploaded:
