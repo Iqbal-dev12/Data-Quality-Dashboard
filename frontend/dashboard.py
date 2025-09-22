@@ -1313,9 +1313,16 @@ with tab_overview:
 	# Trend area (Plotly optional) - Robust version with error handling
 	lc, rc = st.columns([0.62, 0.38])
 	with lc:
-		# Show the actual date range being displayed
-		date_range_text = f"({start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')})"
-		st.markdown(f"<div class='section-title'>Data Quality Trend {date_range_text}</div>", unsafe_allow_html=True)
+		# Show the actual date range being displayed with enhanced formatting for custom dates
+		if preset == "Custom":
+			# More prominent display for custom date ranges
+			date_range_text = f"<span style='color: #3b82f6; font-weight: 600;'>Custom Range: {start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}</span>"
+			st.markdown(f"<div class='section-title'>Data Quality Trend</div>", unsafe_allow_html=True)
+			st.markdown(f"<div style='font-size: 14px; color: #9ca3af; margin-bottom: 10px; padding: 8px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid #3b82f6;'>{date_range_text}</div>", unsafe_allow_html=True)
+		else:
+			# Standard display for preset ranges
+			date_range_text = f"({start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')})"
+			st.markdown(f"<div class='section-title'>Data Quality Trend {date_range_text}</div>", unsafe_allow_html=True)
 		
 		# Robust data validation and preparation
 		try:
