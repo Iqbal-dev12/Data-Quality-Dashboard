@@ -1313,160 +1313,175 @@ with tab_overview:
 	# Trend area (Plotly optional) - Robust version with error handling
 	lc, rc = st.columns([0.62, 0.38])
 	with lc:
-		# Show the actual date range being displayed with enhanced formatting for custom dates
-		if preset == "Custom":
-			# More prominent display for custom date ranges
-			date_range_text = f"<span style='color: #3b82f6; font-weight: 600;'>Custom Range: {start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}</span>"
-			st.markdown(f"<div class='section-title'>Data Quality Trend</div>", unsafe_allow_html=True)
-			st.markdown(f"<div style='font-size: 14px; color: #9ca3af; margin-bottom: 10px; padding: 8px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid #3b82f6;'>{date_range_text}</div>", unsafe_allow_html=True)
+		# If no CSV is uploaded, suppress the trend chart entirely
+		if not use_uploaded:
+			st.info("Upload a CSV file to see the trend chart.")
 		else:
-			# Standard display for preset ranges
-			date_range_text = f"({start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')})"
-			st.markdown(f"<div class='section-title'>Data Quality Trend {date_range_text}</div>", unsafe_allow_html=True)
-		
-		# Robust data validation and preparation
-		try:
-			# Ensure df exists and has required columns
-			if df is None or df.empty:
-				st.info("No data available for the selected date range to display trend chart.")
+			# Show the actual date range being displayed with enhanced formatting for custom dates
+			if preset == "Custom":
+				# More prominent display for custom date ranges
+				date_range_text = f"<span style='color: #3b82f6; font-weight: 600;'>Custom Range: {start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}</span>"
+				st.markdown(f"<div class='section-title'>Data Quality Trend</div>", unsafe_allow_html=True)
+				st.markdown(f"<div style='font-size: 14px; color: #9ca3af; margin-bottom: 10px; padding: 8px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid #3b82f6;'>{date_range_text}</div>", unsafe_allow_html=True)
 			else:
-				# Ensure required columns exist with default values
-				required_cols = ["date", "valid", "warning", "error"]
-				for col in required_cols:
-					if col not in df.columns:
-						if col == "date":
-							df[col] = pd.to_datetime(datetime.utcnow().date())
-						else:
-							df[col] = 0
-				
-				# Clean and validate data
-				chart_df = df.copy()
-				
-				# Ensure date column is datetime
-				if not pd.api.types.is_datetime64_any_dtype(chart_df["date"]):
-					chart_df["date"] = pd.to_datetime(chart_df["date"], errors="coerce")
-				
-				# Remove rows with invalid dates
-				chart_df = chart_df.dropna(subset=["date"])
-				
-				# Fill NaN values in numeric columns with 0
-				numeric_cols = ["valid", "warning", "error"]
-				for col in numeric_cols:
-					chart_df[col] = pd.to_numeric(chart_df[col], errors="coerce").fillna(0)
-				
-				# Ensure we have at least one data point
-				if chart_df.empty:
-					st.info("No valid data points available for trend chart.")
+				# Standard display for preset ranges
+				date_range_text = f"({start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')})"
+				st.markdown(f"<div class='section-title'>Data Quality Trend {date_range_text}</div>", unsafe_allow_html=True)
+			
+			# Robust data validation and preparation
+			try:
+				# Ensure df exists and has required columns
+				if df is None or df.empty:
+					st.info("No data available for the selected date range to display trend chart.")
 				else:
-					# Sort by date for proper line chart
-					chart_df = chart_df.sort_values("date")
-					
-					# Plotly chart (preferred)
-					if plotly_mode and px is not None:
-						try:
-							melted = chart_df.melt(id_vars=["date"], value_vars=["valid","warning","error"], var_name="metric", value_name="count")
-							fig_pl = px.line(melted, x="date", y="count", color="metric",
-								color_discrete_map={"valid":"#10b981","warning":"#f59e0b","error":"#ef4444"},
-								template="plotly_dark")
-							
-							# Configure markers
-							if show_points:
-								fig_pl.update_traces(mode="lines+markers", marker=dict(size=8, opacity=0.8))
+					# Ensure required columns exist with default values
+					required_cols = ["date", "valid", "warning", "error"]
+					for col in required_cols:
+						if col not in df.columns:
+							if col == "date":
+								df[col] = pd.to_datetime(datetime.utcnow().date())
 							else:
-								fig_pl.update_traces(mode="lines")
-							
-							# Improve layout and date formatting
-							fig_pl.update_layout(
-								margin=dict(l=10,r=10,t=10,b=40), 
-								legend=dict(orientation="h", y=-0.2),
-								xaxis_title="Date",
-								yaxis_title="Count",
-								hovermode='x unified'
-							)
-							# Format x-axis dates properly
-							fig_pl.update_xaxes(tickformat="%Y-%m-%d", tickangle=45)
-							st.plotly_chart(fig_pl, use_container_width=True)
-						except Exception as e:
-							st.error(f"Error creating Plotly chart: {str(e)}")
-							# Fall back to matplotlib
-							plotly_mode = False
+								df[col] = 0
 					
-					# Matplotlib chart (fallback or default)
-					if not plotly_mode or px is None:
-						try:
-							import matplotlib.dates as mdates
-							
-							fig, ax = plt.subplots(figsize=(9.2, 4.0))
-							
-							# Configure markers
-							marker_style = "o" if show_points else None
-							marker_size = 6 if show_points else 0
-							
-							# Plot lines with error handling
-							ax.plot(chart_df["date"], chart_df["valid"], label="Valid", color="#10b981", 
-								   linewidth=2.2, marker=marker_style, markersize=marker_size, 
-								   alpha=0.95, markerfacecolor="#10b981", markeredgecolor="white", 
-								   markeredgewidth=0.5 if show_points else 0)
-							ax.plot(chart_df["date"], chart_df["warning"], label="Warnings", color="#f59e0b", 
-								   linewidth=2.0, marker=marker_style, markersize=marker_size, 
-								   alpha=0.95, markerfacecolor="#f59e0b", markeredgecolor="white", 
-								   markeredgewidth=0.5 if show_points else 0)
-							ax.plot(chart_df["date"], chart_df["error"], label="Errors", color="#ef4444", 
-								   linewidth=2.0, marker=marker_style, markersize=marker_size, 
-								   alpha=0.95, markerfacecolor="#ef4444", markeredgecolor="white", 
-								   markeredgewidth=0.5 if show_points else 0)
-							
-							# Error anomalies (only show if not already showing all points)
-							if "error_anomaly" in chart_df.columns and not show_points:
-								anom = chart_df[chart_df["error_anomaly"] == True]
-								if not anom.empty:
-									ax.scatter(anom["date"], anom["error"], color="#ef4444", s=40, 
-										  zorder=5, label="Error anomaly", alpha=0.8, edgecolors="white")
-							
-							# Styling
-							ax.set_xlabel("Date")
-							ax.set_ylabel("Count")
-							ax.grid(True, linestyle="--", alpha=0.25)
-							
-							# Date formatting with safe interval calculation
+					# Clean and validate data
+					chart_df = df.copy()
+					
+					# Ensure date column is datetime
+					if not pd.api.types.is_datetime64_any_dtype(chart_df["date"]):
+						chart_df["date"] = pd.to_datetime(chart_df["date"], errors="coerce")
+					
+					# Remove rows with invalid dates
+					chart_df = chart_df.dropna(subset=["date"])
+					
+					# Fill NaN values in numeric columns with 0
+					numeric_cols = ["valid", "warning", "error"]
+					for col in numeric_cols:
+						chart_df[col] = pd.to_numeric(chart_df[col], errors="coerce").fillna(0)
+					
+					# Ensure we have at least one data point
+					if chart_df.empty:
+						st.info("No valid data points available for trend chart.")
+					else:
+						# Sort by date for proper line chart
+						chart_df = chart_df.sort_values("date")
+						
+						# Plotly chart (preferred)
+						if plotly_mode and px is not None:
 							try:
-								date_interval = max(1, len(chart_df) // 10) if len(chart_df) > 10 else 1
-								ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-								ax.xaxis.set_major_locator(mdates.DayLocator(interval=date_interval))
-								plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
-							except Exception:
-								# Fallback to simple date formatting
-								ax.tick_params(axis='x', rotation=45)
-							
-							# Remove top and right spines
-							for spine in ["top", "right"]:
-								ax.spines[spine].set_visible(False)
-							
-							# Legend
-							ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=3, frameon=False)
-							plt.tight_layout()
-							
-							# Display chart
-							st.pyplot(fig, use_container_width=True)
-							
-							# Download button
+								melted = chart_df.melt(id_vars=["date"], value_vars=["valid","warning","error"], var_name="metric", value_name="count")
+								fig_pl = px.line(melted, x="date", y="count", color="metric",
+									color_discrete_map={"valid":"#10b981","warning":"#f59e0b","error":"#ef4444"},
+									template="plotly_dark")
+								
+								# Configure markers
+								if show_points:
+									fig_pl.update_traces(mode="lines+markers", marker=dict(size=8, opacity=0.8))
+								else:
+									fig_pl.update_traces(mode="lines")
+								
+								# Improve layout and date formatting
+								fig_pl.update_layout(
+									margin=dict(l=10,r=10,t=10,b=40), 
+									legend=dict(orientation="h", y=-0.2),
+									xaxis_title="Date",
+									yaxis_title="Count",
+									hovermode='x unified'
+								)
+								# Format x-axis dates properly and disable zoom/pan
+								fig_pl.update_xaxes(tickformat="%Y-%m-%d", tickangle=45, fixedrange=True)
+								fig_pl.update_yaxes(fixedrange=True)
+								st.plotly_chart(
+									fig_pl, 
+									use_container_width=True,
+									config={
+										"scrollZoom": False,
+										"displayModeBar": False,
+										"editable": False,
+										"staticPlot": False,
+										"doubleClick": "reset"
+									}
+								)
+							except Exception as e:
+								st.error(f"Error creating Plotly chart: {str(e)}")
+								# Fall back to matplotlib
+								plotly_mode = False
+						
+						# Matplotlib chart (fallback or default)
+						if not plotly_mode or px is None:
 							try:
-								buf = io.BytesIO()
-								fig.savefig(buf, format="png", bbox_inches="tight", dpi=200)
-								st.download_button("Download Trend PNG", data=buf.getvalue(), file_name="trend.png", mime="image/png")
-							except Exception:
-								pass  # Download button is optional
-							
-							# Clean up
-							plt.close(fig)
-							
-						except Exception as e:
-							st.error(f"Error creating chart: {str(e)}")
-							st.info("Unable to display trend chart. Please check your data format.")
-		
-		except Exception as e:
-			st.error(f"Error processing chart data: {str(e)}")
-			st.info("Unable to display trend chart. Please try uploading your data again.")
+								import matplotlib.dates as mdates
+								
+								fig, ax = plt.subplots(figsize=(9.2, 4.0))
+								
+								# Configure markers
+								marker_style = "o" if show_points else None
+								marker_size = 6 if show_points else 0
+								
+								# Plot lines with error handling
+								ax.plot(chart_df["date"], chart_df["valid"], label="Valid", color="#10b981", 
+								       linewidth=2.2, marker=marker_style, markersize=marker_size, 
+								       alpha=0.95, markerfacecolor="#10b981", markeredgecolor="white", 
+								       markeredgewidth=0.5 if show_points else 0)
+								ax.plot(chart_df["date"], chart_df["warning"], label="Warnings", color="#f59e0b", 
+								       linewidth=2.0, marker=marker_style, markersize=marker_size, 
+								       alpha=0.95, markerfacecolor="#f59e0b", markeredgecolor="white", 
+								       markeredgewidth=0.5 if show_points else 0)
+								ax.plot(chart_df["date"], chart_df["error"], label="Errors", color="#ef4444", 
+								       linewidth=2.0, marker=marker_style, markersize=marker_size, 
+								       alpha=0.95, markerfacecolor="#ef4444", markeredgecolor="white", 
+								       markeredgewidth=0.5 if show_points else 0)
+								
+								# Error anomalies (only show if not already showing all points)
+								if "error_anomaly" in chart_df.columns and not show_points:
+									anom = chart_df[chart_df["error_anomaly"] == True]
+									if not anom.empty:
+										ax.scatter(anom["date"], anom["error"], color="#ef4444", s=40, 
+										      zorder=5, label="Error anomaly", alpha=0.8, edgecolors="white")
+								
+								# Styling
+								ax.set_xlabel("Date")
+								ax.set_ylabel("Count")
+								ax.grid(True, linestyle="--", alpha=0.25)
+								
+								# Date formatting with safe interval calculation
+								try:
+									date_interval = max(1, len(chart_df) // 10) if len(chart_df) > 10 else 1
+									ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+									ax.xaxis.set_major_locator(mdates.DayLocator(interval=date_interval))
+									plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+								except Exception:
+									# Fallback to simple date formatting
+									ax.tick_params(axis='x', rotation=45)
+								
+								# Remove top and right spines
+								for spine in ["top", "right"]:
+									ax.spines[spine].set_visible(False)
+								
+								# Legend
+								ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=3, frameon=False)
+								plt.tight_layout()
+								
+								# Display chart
+								st.pyplot(fig, use_container_width=True)
+								
+								# Download button
+								try:
+									buf = io.BytesIO()
+									fig.savefig(buf, format="png", bbox_inches="tight", dpi=200)
+									st.download_button("Download Trend PNG", data=buf.getvalue(), file_name="trend.png", mime="image/png")
+								except Exception:
+									pass  # Download button is optional
+								
+								# Clean up
+								plt.close(fig)
+								
+							except Exception as e:
+								st.error(f"Error creating chart: {str(e)}")
+								st.info("Unable to display trend chart. Please check your data format.")
+			
+			except Exception as e:
+				st.error(f"Error processing chart data: {str(e)}")
+				st.info("Unable to display trend chart. Please try uploading your data again.")
 
 	with rc:
 		st.markdown("<div class='section-title'>Latest Composition</div>", unsafe_allow_html=True)
