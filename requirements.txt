@@ -5,3 +5,5 @@ python-dotenv==1.0.1
 pandas==2.2.2
 matplotlib==3.9.2
 gunicorn==22.0.0
+openpyxl
+
