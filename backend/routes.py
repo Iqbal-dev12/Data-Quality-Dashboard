@@ -34,11 +34,12 @@ def submit_feedback():
         if not text:
             return jsonify({"error": "Feedback text cannot be empty"}), 400
         
-        # Create feedback object
+        # Create feedback object with timestamp formatted to match frontend expectations
+        timestamp_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
         feedback = Feedback(
             rating=rating,
             text=text,
-            timestamp=datetime.utcnow(),
+            timestamp=timestamp_str,  # store as formatted string
             user_id=data.get('user_id'),
             session_id=data.get('session_id')
         )
@@ -75,9 +76,34 @@ def get_feedback():
         # Get feedback with pagination, sorted by timestamp (newest first)
         feedback_cursor = collection.find({}).sort("timestamp", -1).skip(skip).limit(limit)
         
+        def _to_fmt(val):
+            # Convert datetime or known string formats to '%Y-%m-%d %H:%M:%S.%f'
+            if isinstance(val, datetime):
+                return val.strftime("%Y-%m-%d %H:%M:%S.%f")
+            if isinstance(val, str):
+                # Try RFC 2822/HTTP-date (e.g., Tue, 21 Oct 2025 19:14:33 GMT)
+                try:
+                    from email.utils import parsedate_to_datetime
+                    dt = parsedate_to_datetime(val)
+                    if isinstance(dt, datetime):
+                        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+                except Exception:
+                    pass
+                # Try common Python datetime string 'YYYY-mm-dd HH:MM:SS[.ffffff]'
+                for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+                    try:
+                        dt = datetime.strptime(val, fmt)
+                        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+                    except Exception:
+                        continue
+                return val
+            return val
+
         feedback_list = []
         for doc in feedback_cursor:
             doc['_id'] = str(doc['_id'])  # Convert ObjectId to string
+            if 'timestamp' in doc:
+                doc['timestamp'] = _to_fmt(doc['timestamp'])
             feedback_list.append(doc)
         
         return jsonify({
