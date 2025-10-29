@@ -3,12 +3,11 @@ import sys
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
-from pymongo import MongoClient
 
 # Add the parent directory to Python path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.routes import api_bp
+from backend.routes import api_bp  # make sure your routes handle feedback, sessions, etc.
 
 
 def create_app() -> Flask:
@@ -17,42 +16,25 @@ def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app)
 
-    # ---- MongoDB Connection ----
-    MONGO_URI = os.getenv(
-        "MONGO_URI",
-        "mongodb+srv://fabbnawab_db_user:LEka6FsAx50xAd5x@cluster0.qaohshr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-    )
-    try:
-        client = MongoClient(MONGO_URI)
-        app.db = client["data_quality_dashboard"]  # database name
-        print("✅ MongoDB client initialized successfully.")
-    except Exception as e:
-        print(f"❌ Failed to initialize MongoDB client: {e}")
-        raise e
-
-    # ---- Routes ----
+    # Register blueprints
     app.register_blueprint(api_bp, url_prefix="/api")
 
     @app.get("/health")
     def health_check():
-        try:
-            app.db.command("ping")
-            return {"status": "ok", "db": "connected"}
-        except Exception as e:
-            error_message = f"❌ MongoDB connection failed: {e}"
-            print(error_message)
-            return {"status": "error", "db_error": str(e)}, 500
+        return {"status": "ok"}
 
     return app
 
 
-# ✅ Create a global app instance for Gunicorn
-app = create_app()
-
 if __name__ == "__main__":
-    host = os.getenv("FLASK_HOST", "0.0.0.0")
-    port = int(os.getenv("FLASK_PORT", "5000"))
-    app.run(host=host, port=port, debug=True)
+    app = create_app()
+    
+    # Stable server settings
+    host = "127.0.0.1"
+    port = 5001
+    debug = False           # disable debug mode
+    use_reloader = False    # disable Flask auto-reloader
 
-
+    print(f"Starting backend server on http://{host}:{port} ...")
+    app.run(host=host, port=port, debug=debug, use_reloader=use_reloader)
 
