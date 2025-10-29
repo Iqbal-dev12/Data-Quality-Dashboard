@@ -143,8 +143,12 @@ st.markdown(
 			transform: scale(1.1); 
 		}
 		
-		/* Ensure main content doesn't overlap footer */
-		.main .block-container { padding-bottom: 120px !important; }
+		/* Ensure main content doesn't overlap footer and center content */
+		.main .block-container { 
+			padding-bottom: 120px !important; 
+			max-width: 95% !important;
+			margin: 0 auto !important;
+		}
 		
 		/* Sidebar styling - make it more compact */
 		section[data-testid="stSidebar"] {
@@ -202,6 +206,8 @@ st.markdown(
 				padding-bottom: 180px !important; 
 				padding-left: 1rem !important;
 				padding-right: 1rem !important;
+				max-width: 95% !important;
+				margin: 0 auto !important;
 			}
 			
 			/* KPI Cards - Stack vertically on mobile */
@@ -321,6 +327,8 @@ st.markdown(
 				padding-left: 0.5rem !important;
 				padding-right: 0.5rem !important;
 				padding-bottom: 200px !important;
+				max-width: 95% !important;
+				margin: 0 auto !important;
 			}
 			
 			.kpi-card { 
@@ -358,6 +366,8 @@ st.markdown(
 			.main .block-container { 
 				padding-left: 1.5rem !important;
 				padding-right: 1.5rem !important;
+				max-width: 95% !important;
+				margin: 0 auto !important;
 			}
 			
 			.footer-links { 
@@ -723,17 +733,15 @@ def get_prev_period_index(df: pd.DataFrame, window: int = 7) -> int:
 # -------------------------
 # Header
 # -------------------------
-col_left, col_center, col_right = st.columns([0.2, 0.6, 0.2])
-with col_center:
-	st.markdown(
-		f"""
-		<div style='text-align:center;'>
-			<div class='hero-title'>Quality Control Dashboard</div>
-			<div class='small-muted'>API: {api_base_url}</div>
-		</div>
-		""",
-		unsafe_allow_html=True
-	)
+st.markdown(
+    f"""
+    <div style='text-align: center; margin: 0 auto; max-width: 800px;'>
+        <h1 class='hero-title' style='margin: 0.5em 0;'>Data Quality Dashboard</h1>
+        <div class='small-muted'>API: {api_base_url}</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # -------------------------
 # Data load
