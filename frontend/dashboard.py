@@ -48,6 +48,13 @@ def load_custom_css() -> None:
 st.markdown(
 	"""
 	<style>
+		/* Make main content area wider */
+		.main .block-container {
+			max-width: 95% !important;
+			padding-left: 1.5rem !important;
+			padding-right: 1.5rem !important;
+		}
+		
 		.kpi-card { border-radius: 14px; padding: 18px 18px; background: linear-gradient(180deg, #0f172a 0%, #0b1222 100%); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 6px 22px rgba(0,0,0,0.25); color: #e5e7eb; }
 		.kpi-title { font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
 		.kpi-value { font-size: 30px; font-weight: 800; line-height: 1.1; color: #fafafa; }
