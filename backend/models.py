@@ -119,3 +119,4 @@ class UserSession:
             session.actions.append(action)
         
         return session
+
