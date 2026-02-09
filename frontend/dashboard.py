@@ -17,6 +17,8 @@ try:
 except Exception:
 	px = None
 
+
+
 # -------------------------
 # Page config
 # -------------------------
@@ -28,11 +30,65 @@ st.set_page_config(
 )
 
 # -------------------------
+# Vanta Clouds2 Background (components.html runs JS; Streamlit 1.38 has no st.html unsafe_allow_javascript)
+# -------------------------
+components.html(
+	"""
+	<script>
+	(function() {
+		var doc = window.parent.document;
+		if (doc.getElementById('vanta-bg')) return;
+		var vantaDiv = doc.createElement('div');
+		vantaDiv.id = 'vanta-bg';
+		vantaDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:-2;';
+		doc.body.insertBefore(vantaDiv, doc.body.firstChild);
+		var overlay = doc.createElement('div');
+		overlay.id = 'vanta-dark-overlay';
+		overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;background:rgba(7,25,47,0.82);pointer-events:none;';
+		doc.body.insertBefore(overlay, doc.body.firstChild);
+		function loadScript(src, cb) {
+			var s = doc.createElement('script');
+			s.src = src;
+			s.onload = cb;
+			doc.head.appendChild(s);
+		}
+		function init() {
+			if (window.parent.VANTA && window.parent.VANTA.CLOUDS2) {
+				window.parent.VANTA.CLOUDS2({
+					el: "#vanta-bg",
+					mouseControls: true,
+					touchControls: true,
+					gyroControls: false,
+					minHeight: 200,
+					minWidth: 200,
+					scale: 1,
+					backgroundColor: 0x07192f,
+					skyColor: 0x5ca6ca,
+					cloudColor: 0x334d80,
+					lightColor: 0xffffff,
+					speed: 1,
+					texturePath: "https://www.vantajs.com/gallery/noise.png"
+				});
+			} else {
+				setTimeout(init, 150);
+			}
+		}
+		loadScript("https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js", function() {
+			loadScript("https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.clouds2.min.js", init);
+		});
+	})();
+	</script>
+	""",
+	height=0,
+)
+
+# -------------------------
 # CSS loader (optional external CSS)
 # -------------------------
 def load_custom_css() -> None:
 	# Looks for multiple likely CSS locations
 	candidate_paths = [
+		"style.css",  # Current directory first
 		os.path.join("frontend", "assets", "styles.css"),
 		os.path.join("frontend", "style.css"),
 		os.path.join("assets", "styles.css"),
@@ -42,17 +98,25 @@ def load_custom_css() -> None:
 		if os.path.exists(path):
 			with open(path, "r", encoding="utf-8") as f:
 				st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+			print(f"Loaded CSS from: {path}")  # Debug output
 			return
 
 # Baseline minimal CSS (overridden if external found)
 st.markdown(
 	"""
 	<style>
-		/* Make main content area wider */
-		.main .block-container {
-			max-width: 95% !important;
-			padding-left: 1.5rem !important;
-			padding-right: 1.5rem !important;
+		/* Force full width on root containers */
+		#root,
+		#root > div,
+		.stApp,
+		[data-testid="stAppViewContainer"] {
+			max-width: 100% !important;
+			width: 100% !important;
+		}
+		
+		html, body {
+			overflow: hidden !important;
+			height: 100vh !important;
 		}
 		
 		.kpi-card { border-radius: 14px; padding: 18px 18px; background: linear-gradient(180deg, #0f172a 0%, #0b1222 100%); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 6px 22px rgba(0,0,0,0.25); color: #e5e7eb; }
@@ -83,8 +147,10 @@ st.markdown(
 			justify-content: space-between !important; 
 			align-items: flex-start !important; 
 			width: 100% !important; 
-			max-width: 1200px !important;
+			max-width: 100% !important;
 			margin: 0 auto !important;
+			padding: 0 2rem !important;
+			box-sizing: border-box !important;
 		}
 		.footer-item { 
 			text-align: center !important; 
@@ -150,13 +216,6 @@ st.markdown(
 			transform: scale(1.1); 
 		}
 		
-		/* Ensure main content doesn't overlap footer and center content */
-		.main .block-container { 
-			padding-bottom: 120px !important; 
-			max-width: 95% !important;
-			margin: 0 auto !important;
-		}
-		
 		/* Sidebar styling - make it more compact */
 		section[data-testid="stSidebar"] {
 			width: 280px !important;
@@ -204,6 +263,99 @@ st.markdown(
 			width: auto !important;
 			padding: 0.5rem 1rem !important;
 			font-size: 14px !important;
+		}
+		
+		
+		/* Main content - full width across screen - Aggressive targeting */
+		[data-testid="stAppViewContainer"],
+		[data-testid="stAppViewContainer"] > .main,
+		[data-testid="stAppViewContainer"] .main,
+		[data-testid="stAppViewContainer"] .main .block-container,
+		.stApp .main .block-container,
+		div[data-testid="stMain"],
+		div[data-testid="stMain"] > div,
+		div[data-testid="stMain"] > div > div,
+		div[data-testid="stMain"] > div > div > div,
+		div[data-testid="stMain"] > div > div > div > div,
+		div[data-testid="stMain"] > div > div > div > div > .block-container,
+		.block-container,
+		.element-container {
+			max-width: 100% !important;
+			width: 100% !important;
+		}
+		
+		/* Specific padding for main content area */
+		[data-testid="stAppViewContainer"] .main .block-container {
+			padding-left: 2rem !important;
+			padding-right: 2rem !important;
+			padding-top: 1rem !important;
+			box-sizing: border-box !important;
+		}
+		
+		/* Override any Streamlit default max-width */
+		.stApp > div,
+		.stApp > div > div,
+		.stApp > div > div > div {
+			max-width: 100% !important;
+		}
+		
+		/* Target the main content area more specifically */
+		.main .block-container {
+			max-width: 100% !important;
+			width: 100% !important;
+			margin-left: 0 !important;
+			margin-right: 0 !important;
+			padding-left: 2rem !important;
+			padding-right: 2rem !important;
+			box-sizing: border-box !important;
+		}
+		
+		/* Layout: main content fills entire UI (balanced symmetry) */
+		[data-testid="stAppViewContainer"] {
+			max-width: 100% !important;
+			width: 100% !important;
+			position: relative !important;
+			height: 100vh !important;
+			overflow-y: auto !important;
+			overflow-x: hidden !important;
+		}
+		
+		[data-testid="stAppViewContainer"] > .main {
+			width: 100% !important;
+			max-width: 100% !important;
+			margin: 0 !important;
+			padding: 0 !important;
+		}
+		
+		section[data-testid="stSidebar"] {
+			position: fixed !important;
+			left: 0 !important;
+			top: 0 !important;
+			height: 100vh !important;
+			width: 280px !important;
+			z-index: 999999 !important;
+		}
+		section[data-testid="stSidebar"] > div {
+			width: 280px !important;
+			padding-left: 1rem !important;
+			padding-right: 1rem !important;
+		}
+		
+		.block-container,
+		.main .block-container,
+		[data-testid="stAppViewContainer"] .main .block-container {
+			max-width: 100% !important;
+			width: 100% !important;
+			margin-left: 0 !important;
+			margin-right: 0 !important;
+			padding: 1rem 2rem 4rem 2rem !important;
+			box-sizing: border-box !important;
+		}
+		
+		[data-testid="stMain"],
+		[data-testid="stMain"] > div {
+			max-width: 100% !important;
+			width: 100% !important;
 		}
 		
 		/* Mobile Responsive Styles */
@@ -373,8 +525,9 @@ st.markdown(
 			.main .block-container { 
 				padding-left: 1.5rem !important;
 				padding-right: 1.5rem !important;
-				max-width: 95% !important;
-				margin: 0 auto !important;
+				max-width: 100% !important;
+				margin-left: 0 !important;
+				margin-right: 0 !important;
 			}
 			
 			.footer-links { 
@@ -432,6 +585,28 @@ st.markdown(
 	unsafe_allow_html=True,
 )
 load_custom_css()
+
+# Full-width layout CSS
+st.markdown(
+	"""
+	<style>
+		.main .block-container {
+			max-width: 100% !important;
+			width: 100% !important;
+			margin-left: 0 !important;
+			margin-right: 0 !important;
+			padding-left: 2rem !important;
+			padding-right: 2rem !important;
+			box-sizing: border-box !important;
+		}
+		[data-testid="stAppViewContainer"] > .main {
+			max-width: 100% !important;
+			width: 100% !important;
+		}
+	</style>
+	""",
+	unsafe_allow_html=True,
+)
 
 # -------------------------
 # Sidebar controls
@@ -645,10 +820,9 @@ column_filter = st.sidebar.multiselect(
 )
 # Simple duplicate detection - just 2 options
 duplicate_mode = st.sidebar.radio(
-	"Duplicate Detection Mode",
-	options=["By ID Column", "By All Columns"],
-	index=0,
-	help="Choose how to detect duplicates: by a specific ID column or by comparing all columns"
+    "Duplicate Detection Mode",
+    options=["By ID Column", "By All Columns"],
+    index=0
 )
 
 id_column_name = None
@@ -742,8 +916,8 @@ def get_prev_period_index(df: pd.DataFrame, window: int = 7) -> int:
 # -------------------------
 st.markdown(
     f"""
-    <div style='text-align: center; margin: 0 auto; max-width: 800px;'>
-        <h1 class='hero-title' style='margin: 0.5em 0;'>Data Quality Dashboard</h1>
+    <div class='dashboard-header' style='text-align: center; margin: -100px auto 0 auto; width: 100%; max-width: 100%; position: relative; left: 0; right: 0;'>
+        <h1 class='hero-title' style='margin: 0 0 0.6em 0; padding-top: 0.2em;'>Data Quality Dashboard</h1>
         <div class='small-muted'>API: {api_base_url}</div>
     </div>
     """,
@@ -753,6 +927,18 @@ st.markdown(
 # -------------------------
 # Data load
 # -------------------------
+# Base container for drill‑down rows so it's always defined
+rows_df = pd.DataFrame(
+	{
+		"date": [],
+		"record_id": [],
+		"column": [],
+		"issue": [],
+		"status": [],
+		"value": [],
+	}
+)
+
 # Check if we have uploaded data
 use_uploaded = bool(st.session_state.get("upload_df") is not None)
 
@@ -886,20 +1072,181 @@ if use_uploaded:
 		quality_cols = list(filtered_df.columns)
 
 
-	# Simple duplicate detection based on mode
-	if duplicate_mode == "By ID Column" and id_column_name and id_column_name in filtered_df.columns:
-		dup_mask = filtered_df.duplicated(subset=[id_column_name], keep=False)
-	else:
-		# By all columns
-		dup_mask = filtered_df.duplicated(keep=False)
-	# Warnings: missing in quality_cols only
+	# -------------------------
+# Advanced Data Quality Validation
+# -------------------------
+def validate_data_quality(df, id_column_name=None):
+	"""
+	Advanced data quality validation with specific rules:
+	- Missing critical fields (user ID, card ID, transaction amount, timestamp)
+	- Invalid formats (negative amount, invalid date, malformed ID)
+	- Conflicting identity mappings
+	"""
+	validation_results = {
+		'missing_critical': [],
+		'invalid_formats': [],
+		'identity_conflicts': [],
+		'valid_rows': []
+	}
+	
+	if df.empty:
+		return validation_results
+	
+	# 1. Check for missing critical fields
+	critical_fields = []
+	if id_column_name and id_column_name in df.columns:
+		critical_fields.append(id_column_name)
+	
+	# Auto-detect amount fields
+	amount_fields = [col for col in df.columns if any(keyword in str(col).lower() 
+					for keyword in ['amount', 'value', 'price', 'cost', 'total'])]
+	
+	# Auto-detect timestamp fields
+	timestamp_fields = [col for col in df.columns if any(keyword in str(col).lower() 
+					  for keyword in ['date', 'time', 'created', 'timestamp', 'updated'])]
+	
+	critical_fields.extend(amount_fields[:1])  # Take first amount field
+	critical_fields.extend(timestamp_fields[:1])  # Take first timestamp field
+	
+	# Check missing critical fields
+	for field in critical_fields:
+		if field in df.columns:
+			missing_mask = df[field].isna()
+			missing_indices = df[missing_mask].index.tolist()
+			if missing_indices:
+				validation_results['missing_critical'].extend([
+					{'row': idx, 'field': field, 'issue': f'Missing critical field: {field}'}
+					for idx in missing_indices
+				])
+	
+	# 2. Check for invalid formats
+	for field in amount_fields:
+		if field in df.columns:
+			# Check for negative amounts
+			try:
+				numeric_series = pd.to_numeric(df[field], errors='coerce')
+				negative_mask = numeric_series < 0
+				negative_indices = df[negative_mask].index.tolist()
+				if negative_indices:
+					validation_results['invalid_formats'].extend([
+						{'row': idx, 'field': field, 'issue': f'Negative amount: {numeric_series.iloc[i]}'}
+						for i, idx in enumerate(negative_indices)
+					])
+			except:
+				pass
+	
+	# Check for invalid dates
+	for field in timestamp_fields:
+		if field in df.columns:
+			try:
+				date_series = pd.to_datetime(df[field], errors='coerce')
+				invalid_date_mask = date_series.isna() & df[field].notna()
+				invalid_date_indices = df[invalid_date_mask].index.tolist()
+				if invalid_date_indices:
+					validation_results['invalid_formats'].extend([
+						{'row': idx, 'field': field, 'issue': f'Invalid date format: {df[field].iloc[i]}'}
+						for i, idx in enumerate(invalid_date_indices)
+					])
+			except:
+				pass
+	
+	# 3. Check for identity conflicts (if ID column exists)
+	if id_column_name and id_column_name in df.columns:
+		# Check for single user ID linked to multiple card IDs
+		if 'user_id' in df.columns and 'card_id' in df.columns:
+			user_to_cards = df.groupby('user_id')['card_id'].nunique()
+			conflict_users = user_to_cards[user_to_cards > 1].index.tolist()
+			
+			for user_id in conflict_users:
+				conflicted_rows = df[df['user_id'] == user_id].index.tolist()
+				validation_results['identity_conflicts'].extend([
+					{'row': idx, 'field': 'user_id', 'issue': f'User ID {user_id} linked to multiple card IDs'}
+					for idx in conflicted_rows
+				])
+		
+		# Check for single card ID linked to multiple user IDs
+		if 'card_id' in df.columns and 'user_id' in df.columns:
+			card_to_users = df.groupby('card_id')['user_id'].nunique()
+			conflict_cards = card_to_users[card_to_users > 1].index.tolist()
+			
+			for card_id in conflict_cards:
+				conflicted_rows = df[df['card_id'] == card_id].index.tolist()
+				validation_results['identity_conflicts'].extend([
+					{'row': idx, 'field': 'card_id', 'issue': f'Card ID {card_id} linked to multiple user IDs'}
+					for idx in conflicted_rows
+				])
+	
+	# 4. Identify valid rows (no issues)
+	all_issue_indices = set()
+	for issue_list in [validation_results['missing_critical'], validation_results['invalid_formats'], validation_results['identity_conflicts']]:
+		all_issue_indices.update([issue['row'] for issue in issue_list])
+	
+	valid_indices = [idx for idx in df.index if idx not in all_issue_indices]
+	validation_results['valid_rows'] = valid_indices
+	
+	return validation_results
+
+# Apply advanced data quality validation
+	validation_results = validate_data_quality(filtered_df, id_column_name)
+	
+	# Base masks
+	error_mask = pd.Series(False, index=filtered_df.index)
+	warning_mask = pd.Series(False, index=filtered_df.index)
+	
+	# 1) Mark critical missing fields and invalid formats as errors
+	for issue in validation_results['missing_critical']:
+		error_mask.iloc[issue['row']] = True
+	
+	for issue in validation_results['invalid_formats']:
+		error_mask.iloc[issue['row']] = True
+	
+	# 2) Mark identity conflicts as errors and create a separate mask for slicing
+	identity_conflict_mask_full = pd.Series(False, index=filtered_df.index)
+	for issue in validation_results['identity_conflicts']:
+		error_mask.iloc[issue['row']] = True
+		identity_conflict_mask_full.iloc[issue['row']] = True
+	
+	# 3) Warnings: missing in non‑critical quality_cols only
 	if quality_cols:
-		missing_mask = filtered_df[quality_cols].isna().any(axis=1)
+		non_critical_quality_cols = [col for col in quality_cols if col not in 
+								  [id_column_name] + [col for col in filtered_df.columns 
+								   if any(keyword in str(col).lower() 
+									  for keyword in ['amount', 'date', 'time'])]]
+		if non_critical_quality_cols:
+			missing_mask = filtered_df[non_critical_quality_cols].isna().any(axis=1)
+		else:
+			missing_mask = pd.Series(False, index=filtered_df.index)
 	else:
-		missing_mask = filtered_df.isna().any(axis=1)
-	warning_mask = missing_mask & (~dup_mask)
-	error_mask = dup_mask
-	valid_mask = ~(warning_mask | error_mask)
+		missing_mask = pd.Series(False, index=filtered_df.index)
+	
+	warning_mask = missing_mask & (~error_mask)
+	
+	# 4) Duplicate handling
+	# Global rule: hard errors from validation_results above already applied.
+	# Here we only add duplicate-driven errors/warnings per mode.
+	dup_all_mask = filtered_df.duplicated(keep=False)
+	if duplicate_mode == "By ID Column" and id_column_name and id_column_name in filtered_df.columns:
+		# Repeated IDs are allowed. Only:
+		# - Same ID + identical row  -> Error
+		# - Same ID + differing row  -> Warning (if not already error)
+		dup_id_mask = filtered_df.duplicated(subset=[id_column_name], keep=False)
+		
+		# True duplicates: same ID and all columns identical
+		strong_dup_mask = dup_id_mask & dup_all_mask
+		error_mask = error_mask | strong_dup_mask
+		
+		# Weaker duplicates: same ID but some columns differ
+		weak_dup_mask = dup_id_mask & (~dup_all_mask) & (~error_mask)
+		warning_mask = warning_mask | weak_dup_mask
+		
+		dup_indicator = dup_id_mask
+	else:
+		# By all columns mode: any fully identical row is an error
+		error_mask = error_mask | dup_all_mask
+		dup_indicator = dup_all_mask
+	
+	# Valid rows: no errors or warnings
+	valid_mask = ~(error_mask | warning_mask)
 
 	if date_col and date_col in filtered_df.columns:
 		# Ensure datetime with robust parsing
@@ -956,19 +1303,82 @@ if use_uploaded:
 			date_filtered_df = filtered_df
 		
 		
-		# Recalculate masks for date-filtered data
-		# Apply same simple duplicate detection logic to date-filtered data
-		if duplicate_mode == "By ID Column" and id_column_name and id_column_name in date_filtered_df.columns:
-			dup_mask_filtered = date_filtered_df.duplicated(subset=[id_column_name], keep=False)
-		else:
-			dup_mask_filtered = date_filtered_df.duplicated(keep=False)
+		# Recalculate masks for date-filtered data using the same rules
+		validation_results_filtered = validate_data_quality(date_filtered_df, id_column_name)
+		
+		# DEBUG: Check if we have data
+		print(f"\n=== BEFORE MASK CREATION ===")
+		print(f"date_filtered_df shape: {date_filtered_df.shape}")
+		print(f"date_filtered_df index: {date_filtered_df.index.tolist()[:10]}")  # First 10
+		print(f"validation_results_filtered keys: {validation_results_filtered.keys()}")
+		print(f"missing_critical count: {len(validation_results_filtered['missing_critical'])}")
+		print(f"invalid_formats count: {len(validation_results_filtered['invalid_formats'])}")
+		print(f"identity_conflicts count: {len(validation_results_filtered['identity_conflicts'])}")
+		
+		# Step 1: Initialize fresh masks for this view
+		error_mask_filtered = pd.Series(False, index=date_filtered_df.index)
+		warning_mask_filtered = pd.Series(False, index=date_filtered_df.index)
+		
+		# Step 2: Apply hard error rules (recomputed on date_filtered_df only)
+		for issue in validation_results_filtered['missing_critical']:
+			if issue['row'] in error_mask_filtered.index:
+				error_mask_filtered.loc[issue['row']] = True
+		for issue in validation_results_filtered['invalid_formats']:
+			if issue['row'] in error_mask_filtered.index:
+				error_mask_filtered.loc[issue['row']] = True
+		
+		# Step 3: Apply identity conflicts by slicing the precomputed full-dataset mask
+		id_conf_slice = (
+			identity_conflict_mask_full
+			.reindex(date_filtered_df.index)
+			.fillna(False)
+			.astype(bool)
+		)
+		error_mask_filtered = error_mask_filtered | id_conf_slice
+		
+		# Warnings from non-critical missing fields (only if not already error)
 		if quality_cols:
-			missing_mask_filtered = date_filtered_df[quality_cols].isna().any(axis=1)
+			non_critical_quality_cols_f = [col for col in quality_cols if col not in 
+										   [id_column_name] + [col for col in date_filtered_df.columns 
+											if any(keyword in str(col).lower() 
+												for keyword in ['amount', 'date', 'time'])]]
+			if non_critical_quality_cols_f:
+				missing_mask_filtered = date_filtered_df[non_critical_quality_cols_f].isna().any(axis=1)
+			else:
+				missing_mask_filtered = pd.Series(False, index=date_filtered_df.index)
 		else:
-			missing_mask_filtered = date_filtered_df.isna().any(axis=1)
-		warning_mask_filtered = missing_mask_filtered & (~dup_mask_filtered)
-		error_mask_filtered = dup_mask_filtered
+			missing_mask_filtered = pd.Series(False, index=date_filtered_df.index)
+		
+		warning_mask_filtered = missing_mask_filtered & (~error_mask_filtered)
+		
+		# Duplicate handling for the selected date range (same rules as global)
+		dup_all_mask_f = date_filtered_df.duplicated(keep=False)
+		if duplicate_mode == "By ID Column" and id_column_name and id_column_name in date_filtered_df.columns:
+			dup_id_mask_f = date_filtered_df.duplicated(subset=[id_column_name], keep=False)
+			
+			# True duplicates for this ID: identical rows
+			strong_dup_mask_f = dup_id_mask_f & dup_all_mask_f
+			error_mask_filtered = error_mask_filtered | strong_dup_mask_f
+			
+			# Weaker duplicates: same ID, different payload
+			weak_dup_mask_f = dup_id_mask_f & (~dup_all_mask_f) & (~error_mask_filtered)
+			warning_mask_filtered = warning_mask_filtered | weak_dup_mask_f
+			
+			dup_indicator_filtered = dup_id_mask_f
+		else:
+			# By all columns mode: fully identical rows -> errors
+			error_mask_filtered = error_mask_filtered | dup_all_mask_f
+			dup_indicator_filtered = dup_all_mask_f
+		
 		valid_mask_filtered = ~(warning_mask_filtered | error_mask_filtered)
+		
+		# DEBUG: Print actual counts before aggregation
+		print(f"\n=== DATE-FILTERED VIEW DEBUG ===")
+		print(f"Total rows in date_filtered_df: {len(date_filtered_df)}")
+		print(f"Error mask sum: {error_mask_filtered.sum()}")
+		print(f"Warning mask sum: {warning_mask_filtered.sum()}")
+		print(f"Valid mask sum: {valid_mask_filtered.sum()}")
+		print(f"Total classified: {error_mask_filtered.sum() + warning_mask_filtered.sum() + valid_mask_filtered.sum()}")
 		
 		# Aggregate by day
 		agg = pd.DataFrame({
@@ -1002,7 +1412,8 @@ if use_uploaded:
 		else:
 			first_missing_series = pd.Series(index=date_filtered_df.index, dtype=object)
 		rows_df["column"] = first_missing_series
-		rows_df["issue"] = np.where(error_mask_filtered, "duplicate", np.where(warning_mask_filtered, "missing", "ok"))
+		# Issue type: duplicates vs missing vs ok (for metrics)
+		rows_df["issue"] = np.where(dup_indicator_filtered, "duplicate", np.where(warning_mask_filtered, "missing", "ok"))
 		rows_df["date"] = pd.to_datetime(date_filtered_df[date_col]).dt.normalize()
 	else:
 		# Fallback to original logic for non-date or single snapshot data
@@ -1019,7 +1430,12 @@ if use_uploaded:
 		else:
 			first_missing_series = pd.Series(index=filtered_df.index, dtype=object)
 		rows_df["column"] = first_missing_series
-		rows_df["issue"] = np.where(error_mask, "duplicate", np.where(warning_mask, "missing", "ok"))
+		# Issue type on full dataset (used for duplicate / missing KPI)
+		if duplicate_mode == "By ID Column" and id_column_name and id_column_name in filtered_df.columns:
+			dup_indicator_full = filtered_df.duplicated(subset=[id_column_name], keep=False)
+		else:
+			dup_indicator_full = filtered_df.duplicated(keep=False)
+		rows_df["issue"] = np.where(dup_indicator_full, "duplicate", np.where(warning_mask, "missing", "ok"))
 		rows_df["date"] = df["date"].iloc[-1] if len(df)>0 else pd.to_datetime(datetime.utcnow().date())
 	if "value" not in rows_df.columns:
 		rows_df["value"] = ""
@@ -1044,13 +1460,126 @@ if use_uploaded:
 			ctx_parts.append(f"{c}: contains '{cfg[1]}'")
 	
 	rows_df["filtered_by"] = ",  ".join(ctx_parts) if ctx_parts else "filtered_by: none"
-
-if df.empty:
-	st.warning("No data available for the selected range.")
-	st.stop()
+	
+# If an upload is active but the Overview summary frame `df` wasn't rebuilt
+# (e.g., due to edge-case flow/indentation), recompute it from the uploaded rows
+# so KPIs don't show all zeros.
+if use_uploaded and (df is None or df.empty or not all(c in df.columns for c in ["valid", "warning", "error"])):
+	try:
+		_tmp = st.session_state.get("upload_df")
+		if _tmp is not None and len(_tmp) > 0:
+			work_df = _tmp.copy()
+			date_col = st.session_state.get("upload_date_col")
+			# If we have a date column, filter by selected date preset/range
+			if date_col and date_col in work_df.columns:
+				work_df[date_col] = pd.to_datetime(work_df[date_col], errors="coerce")
+				work_df = work_df.dropna(subset=[date_col])
+				if apply_date_filter:
+					start_norm = pd.to_datetime(start_dt).normalize()
+					end_norm = pd.to_datetime(end_dt).normalize()
+					dates_norm = pd.to_datetime(work_df[date_col]).dt.normalize()
+					date_filtered_df = work_df[(dates_norm >= start_norm) & (dates_norm <= end_norm)]
+				else:
+					date_filtered_df = work_df
+			
+			# Re-run validation on the filtered rows and aggregate
+			vr = validate_data_quality(date_filtered_df, id_column_name)
+			# Step 1: Initialize fresh masks
+			err = pd.Series(False, index=date_filtered_df.index)
+			warn = pd.Series(False, index=date_filtered_df.index)
+			
+			# Step 2: Apply hard errors (recomputed on date_filtered_df)
+			for issue in vr["missing_critical"]:
+				if issue["row"] in err.index:
+					err.loc[issue["row"]] = True
+			for issue in vr["invalid_formats"]:
+				if issue["row"] in err.index:
+					err.loc[issue["row"]] = True
+			
+			# Step 3: Slice identity conflicts from full-dataset mask
+			if 'identity_conflict_mask_full' in locals():
+				id_conf_slice_fallback = (
+					identity_conflict_mask_full
+					.reindex(date_filtered_df.index)
+					.fillna(False)
+					.astype(bool)
+				)
+				err = err | id_conf_slice_fallback
+			
+			# Warnings: Missing (non-critical) fields only if not already error
+			if "quality_cols" in locals() and quality_cols:
+				non_critical = [col for col in quality_cols if col in date_filtered_df.columns and col not in
+							   [id_column_name] + [col for col in date_filtered_df.columns
+								if any(k in str(col).lower() for k in ["amount", "date", "time"])]]
+				miss = date_filtered_df[non_critical].isna().any(axis=1) if non_critical else pd.Series(False, index=date_filtered_df.index)
+			else:
+				miss = pd.Series(False, index=date_filtered_df.index)
+			warn = miss & (~err)
+			
+			# Duplicate rules (same semantics as main pipeline)
+			dup_all = date_filtered_df.duplicated(keep=False)
+			if duplicate_mode == "By ID Column" and id_column_name and id_column_name in date_filtered_df.columns:
+				dup_id = date_filtered_df.duplicated(subset=[id_column_name], keep=False)
+				# True duplicates: same ID + identical full row
+				err = err | (dup_id & dup_all)
+				# Weaker duplicates: same ID, different payload
+				warn = warn | (dup_id & (~dup_all) & (~err))
+				dup_indicator_filtered = dup_id
+			else:
+				# All-columns mode: fully identical rows -> errors
+				err = err | dup_all
+				dup_indicator_filtered = dup_all
+			
+			valid = ~(err | warn)
+			
+			# Build time series df
+			if date_col and date_col in date_filtered_df.columns:
+				agg = pd.DataFrame(
+					{
+						"date": pd.to_datetime(date_filtered_df[date_col]).dt.normalize(),
+						"valid": valid.astype(int),
+						"warning": warn.astype(int),
+						"error": err.astype(int),
+					}
+				)
+				df = agg.groupby("date", as_index=False).sum().sort_values("date")
+			else:
+				_snapshot_date = pd.to_datetime(datetime.utcnow().date())
+				df = pd.DataFrame(
+					[
+						{
+							"date": _snapshot_date,
+							"valid": int(valid.sum()),
+							"warning": int(warn.sum()),
+							"error": int(err.sum()),
+						}
+					]
+				)
+			
+			# Ensure rows_df exists for downstream metrics
+			rows_df = date_filtered_df.copy()
+			rows_df["status"] = np.where(err, "error", np.where(warn, "warning", "valid"))
+			rows_df["issue"] = np.where(dup_indicator_filtered, "duplicate", np.where(warn, "missing", "ok"))
+	except Exception:
+		pass
 
 # Derived columns
 df = df.copy()
+
+# Ensure we always have valid/warning/error columns, even if upstream produced
+# an empty or differently-shaped frame for edge cases.
+required_cols = ["valid", "warning", "error"]
+if not all(col in df.columns for col in required_cols):
+	_snapshot_date = pd.to_datetime(datetime.utcnow().date())
+	df = pd.DataFrame(
+		{
+			"date": [_snapshot_date],
+			"valid": [0],
+			"warning": [0],
+			"error": [0],
+		}
+	)
+
 df["total"] = df[["valid", "warning", "error"]].sum(axis=1)
 df["dq_score"] = (df["valid"] / df["total"]).fillna(0) * 100
 if len(df) > 0:
@@ -1298,12 +1827,24 @@ if tab_upload is not None:
 						csv_dups = b""
 					b1, b2, b3 = st.columns(3)
 					with b1:
-						st.download_button("Missing by column (CSV)", data=csv_miss, file_name="missing_by_column.csv", mime="text/csv")
+						if use_uploaded:
+							st.download_button("Missing by column (CSV)", data=csv_miss, file_name="missing_by_column.csv", mime="text/csv", key="dl_miss_col")
+						else:
+							if st.button("Missing by column (CSV)", key="btn_miss_col"):
+								st.toast("Upload CSV file first", icon="⚠️")
 					with b2:
-						st.download_button("Column profile (CSV)", data=csv_prof, file_name="column_profile.csv", mime="text/csv")
+						if use_uploaded:
+							st.download_button("Column profile (CSV)", data=csv_prof, file_name="column_profile.csv", mime="text/csv", key="dl_prof")
+						else:
+							if st.button("Column profile (CSV)", key="btn_prof"):
+								st.toast("Upload CSV file first", icon="⚠️")
 					with b3:
-						if dup_count>0:
-							st.download_button("Duplicate rows (CSV)", data=csv_dups, file_name="duplicates.csv", mime="text/csv")
+						if dup_count > 0:
+							if use_uploaded:
+								st.download_button("Duplicate rows (CSV)", data=csv_dups, file_name="duplicates.csv", mime="text/csv", key="dl_dups")
+							else:
+								if st.button("Duplicate rows (CSV)", key="btn_dups"):
+									st.toast("Upload CSV file first", icon="⚠️")
 
 with tab_overview:
 	# KPI cards - show 0 when no file uploaded, real data when uploaded
@@ -1326,30 +1867,11 @@ with tab_overview:
 	else:
 		# Real data from uploaded CSV - calculate KPIs from the actual filtered data
 		# Use the date_filtered_df which contains the actual row counts
-		if 'date_filtered_df' in locals() and not date_filtered_df.empty:
-			# Calculate KPIs from the actual data rows
-			if duplicate_mode == "By ID Column" and id_column_name and id_column_name in date_filtered_df.columns:
-				dup_mask_kpi = date_filtered_df.duplicated(subset=[id_column_name], keep=False)
-			else:
-				dup_mask_kpi = date_filtered_df.duplicated(keep=False)
-			
-			if quality_cols:
-				missing_mask_kpi = date_filtered_df[quality_cols].isna().any(axis=1)
-			else:
-				missing_mask_kpi = date_filtered_df.isna().any(axis=1)
-			
-			warning_mask_kpi = missing_mask_kpi & (~dup_mask_kpi)
-			error_mask_kpi = dup_mask_kpi
-			valid_mask_kpi = ~(warning_mask_kpi | error_mask_kpi)
-			
-			valid_curr = int(valid_mask_kpi.sum())
-			warn_curr = int(warning_mask_kpi.sum())
-			err_curr = int(error_mask_kpi.sum())
-		else:
-			# Fallback to aggregated data if date_filtered_df not available
-			valid_curr = int(pd.to_numeric(df["valid"], errors="coerce").sum())
-			warn_curr = int(pd.to_numeric(df["warning"], errors="coerce").sum())
-			err_curr = int(pd.to_numeric(df["error"], errors="coerce").sum())
+		# Always derive KPIs from the aggregated series `df` that already applies
+		# all global error + duplicate rules to ensure consistency across views.
+		valid_curr = int(pd.to_numeric(df["valid"], errors="coerce").sum())
+		warn_curr = int(pd.to_numeric(df["warning"], errors="coerce").sum())
+		err_curr = int(pd.to_numeric(df["error"], errors="coerce").sum())
 		
 		total_curr = max(1, valid_curr + warn_curr + err_curr)
 		dq_curr = (valid_curr / total_curr) * 100.0
@@ -1389,7 +1911,11 @@ with tab_overview:
 			try:
 				_valid_rows = rows_df[rows_df["status"]=="valid"] if "status" in rows_df.columns else rows_df
 				_valid_csv = _valid_rows.to_csv(index=False).encode("utf-8")
-				st.download_button("Download Valid Rows", data=_valid_csv, file_name="valid_rows.csv", mime="text/csv", key="dl_valid")
+				if use_uploaded:
+					st.download_button("Download Valid Rows", data=_valid_csv, file_name="valid_rows.csv", mime="text/csv", key="dl_valid")
+				else:
+					if st.button("Download Valid Rows", key="btn_valid"):
+						st.toast("Upload CSV file first", icon="⚠️")
 			except Exception:
 				pass
 			st.markdown("</div>", unsafe_allow_html=True)
@@ -1407,7 +1933,11 @@ with tab_overview:
 			try:
 				_warn_rows = rows_df[rows_df["status"]=="warning"] if "status" in rows_df.columns else rows_df.iloc[0:0]
 				_warn_csv = _warn_rows.to_csv(index=False).encode("utf-8")
-				st.download_button("Download Warnings", data=_warn_csv, file_name="warnings.csv", mime="text/csv", key="dl_warn")
+				if use_uploaded:
+					st.download_button("Download Warnings", data=_warn_csv, file_name="warnings.csv", mime="text/csv", key="dl_warn")
+				else:
+					if st.button("Download Warnings", key="btn_warn"):
+						st.toast("Upload CSV file first", icon="⚠️")
 			except Exception:
 				pass
 			st.markdown("</div>", unsafe_allow_html=True)
@@ -1425,7 +1955,11 @@ with tab_overview:
 			try:
 				_err_rows = rows_df[rows_df["status"]=="error"] if "status" in rows_df.columns else rows_df.iloc[0:0]
 				_err_csv = _err_rows.to_csv(index=False).encode("utf-8")
-				st.download_button("Download Errors", data=_err_csv, file_name="errors.csv", mime="text/csv", key="dl_err")
+				if use_uploaded:
+					st.download_button("Download Errors", data=_err_csv, file_name="errors.csv", mime="text/csv", key="dl_err")
+				else:
+					if st.button("Download Errors", key="btn_err"):
+						st.toast("Upload CSV file first", icon="⚠️")
 			except Exception:
 				pass
 			st.markdown("</div>", unsafe_allow_html=True)
@@ -1577,8 +2111,12 @@ with tab_overview:
 								try:
 									buf = io.BytesIO()
 									fig.savefig(buf, format="png", bbox_inches="tight", dpi=200)
-									st.download_button("Download Bar Chart PNG", data=buf.getvalue(), 
-													 file_name="bar_chart.png", mime="image/png")
+									if use_uploaded:
+										st.download_button("Download Bar Chart PNG", data=buf.getvalue(), 
+														 file_name="bar_chart.png", mime="image/png", key="dl_bar_chart")
+									else:
+										if st.button("Download Bar Chart PNG", key="btn_bar_chart"):
+											st.toast("Upload CSV file first", icon="⚠️")
 								except Exception:
 									pass  # Download button is optional
 								
@@ -1690,8 +2228,12 @@ with tab_overview:
 						try:
 							buf2 = io.BytesIO()
 							fig2.savefig(buf2, format="png", bbox_inches="tight", dpi=200)
-							st.download_button("Download Pie Chart PNG", data=buf2.getvalue(), 
-											 file_name="pie_chart.png", mime="image/png")
+							if use_uploaded:
+								st.download_button("Download Pie Chart PNG", data=buf2.getvalue(), 
+												 file_name="pie_chart.png", mime="image/png", key="dl_pie_chart")
+							else:
+								if st.button("Download Pie Chart PNG", key="btn_pie_chart"):
+									st.toast("Upload CSV file first", icon="⚠️")
 						except Exception:
 							pass  # Download button is optional
 						
@@ -1878,14 +2420,26 @@ with tab_details:
 
 		c1, c2, c3 = st.columns(3)
 		with c1:
-			st.download_button("CSV", data=csv_bytes, file_name="export.csv", mime="text/csv")
+			if use_uploaded:
+				st.download_button("CSV", data=csv_bytes, file_name="export.csv", mime="text/csv", key="dl_details_csv")
+			else:
+				if st.button("CSV", key="btn_details_csv"):
+					st.toast("Upload CSV file first", icon="⚠️")
 		with c2:
 			if excel_bytes is not None:
-				st.download_button("Excel", data=excel_bytes, file_name="export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+				if use_uploaded:
+					st.download_button("Excel", data=excel_bytes, file_name="export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_details_xlsx")
+				else:
+					if st.button("Excel", key="btn_details_xlsx"):
+						st.toast("Upload CSV file first", icon="⚠️")
 			else:
 				st.caption("Install openpyxl or xlsxwriter to enable Excel export")
 		with c3:
-			st.download_button("JSON", data=view_df.to_json(orient="records").encode("utf-8"), file_name="export.json", mime="application/json")
+			if use_uploaded:
+				st.download_button("JSON", data=view_df.to_json(orient="records").encode("utf-8"), file_name="export.json", mime="application/json", key="dl_details_json")
+			else:
+				if st.button("JSON", key="btn_details_json"):
+					st.toast("Upload CSV file first", icon="⚠️")
 	with right:
 		st.markdown("<div class='section-title'>Extra Metrics</div>", unsafe_allow_html=True)
 		st.metric("% Missing (rows shown)", f"{missing_pct:.1f}%")
@@ -1902,8 +2456,23 @@ with tab_settings:
 	st.markdown("<div class='section-title'>🔒 Admin: Feedback Dashboard</div>", unsafe_allow_html=True)
 	
 	# Admin password protection
-	admin_password = st.text_input("Admin Password", type="password", help="Enter admin password to access feedback data")
-	load_btn = st.button("Load Feedback Data", key="load_feedback_btn")
+	col1, col2 = st.columns([4, 1])
+
+	with col1:
+		admin_password = st.text_input(
+			"Admin Password",
+			type="password"
+		)
+
+	with col2:
+		st.markdown('<div class="load-feedback-btn-container">', unsafe_allow_html=True)
+		load_btn = st.button(
+			"Load Feedback Data",
+			key="load_feedback_btn"
+		)
+		st.markdown('</div>', unsafe_allow_html=True)
+
+
 	
 	if admin_password == "admin123":  # Change this to your preferred password
 		st.success("✅ Admin access granted")
@@ -2099,6 +2668,75 @@ components.html(
 					}
 				}catch(err){}
 			}, true);
+		})();
+	</script>
+	""",
+	height=0,
+)
+
+# FINAL FINAL INJECTION - Loads AFTER everything, including Streamlit's JS
+components.html(
+	"""
+	<script>
+		(function() {
+			// Wait for everything to load, then inject CSS and force width
+			function injectAndForce() {
+				// Inject CSS style tag at the END of head
+				if (!document.getElementById('force-full-width-absolute-final')) {
+					const style = document.createElement('style');
+					style.id = 'force-full-width-absolute-final';
+					style.textContent = `
+						[data-testid="stAppViewContainer"] {
+							max-width: 100vw !important;
+							width: 100vw !important;
+							display: flex !important;
+							flex-direction: row !important;
+						}
+						[data-testid="stAppViewContainer"] > .main {
+							flex: 0 0 auto !important;
+							width: calc(100vw - 280px) !important;
+							max-width: calc(100vw - 280px) !important;
+							margin: 0 !important;
+							padding: 0 !important;
+						}
+						.block-container,
+						.main .block-container {
+							max-width: 100% !important;
+							width: 100% !important;
+							margin-left: 0 !important;
+							margin-right: 0 !important;
+						}
+					`;
+					document.head.appendChild(style);
+				}
+				
+				// Force via JavaScript
+				const main = document.querySelector('[data-testid="stAppViewContainer"] > .main');
+				if (main) {
+					const w = window.innerWidth - 280;
+					main.style.cssText = 'flex: 0 0 auto !important; width: ' + w + 'px !important; max-width: ' + w + 'px !important; margin: 0 !important; padding: 0 !important;';
+				}
+				
+				document.querySelectorAll('.block-container').forEach(function(el) {
+					el.style.cssText = 'max-width: 100% !important; width: 100% !important; margin-left: 0 !important; margin-right: 0 !important;';
+				});
+			}
+			
+			// Run on window load (very last event)
+			window.addEventListener('load', function() {
+				setTimeout(injectAndForce, 100);
+				setTimeout(injectAndForce, 500);
+				setTimeout(injectAndForce, 1000);
+			});
+			
+			// Also run immediately if already loaded
+			if (document.readyState === 'complete') {
+				injectAndForce();
+			}
+			
+			// Continuous enforcement
+			setInterval(injectAndForce, 200);
+			window.addEventListener('resize', injectAndForce);
 		})();
 	</script>
 	""",
