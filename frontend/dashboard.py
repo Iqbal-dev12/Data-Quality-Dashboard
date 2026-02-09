@@ -2049,17 +2049,20 @@ with tab_overview:
 									template="plotly_dark"
 								)
 								
-								# Update layout
+								# Update layout with width constraint
 								fig_pl.update_layout(
 									title="Data Quality Overview",
 									xaxis_title="Metrics",
 									yaxis_title="Count",
-									height=400,
-									showlegend=False
+									height=350,
+									width=720,  # Increased width
+									showlegend=False,
+									paper_bgcolor='black',  # Pure black background like pie chart
+									plot_bgcolor='black'  # Pure black plot area
 								)
 								
-								# Display the chart
-								st.plotly_chart(fig_pl, use_container_width=True)
+								# Display the chart - don't expand to prevent overflow
+								st.plotly_chart(fig_pl, use_container_width=False)
 							except Exception:
 								# Fallback to matplotlib
 								pass
@@ -2069,7 +2072,8 @@ with tab_overview:
 							try:
 								import matplotlib.pyplot as plt
 								
-								fig, ax = plt.subplots(figsize=(2.5, 2))
+								fig, ax = plt.subplots(figsize=(4, 2), facecolor='white')  # Smaller width to fit in card
+								ax.set_facecolor('white')
 								
 								# Extract data
 								metrics = [item['Metric'] for item in filtered_data]
@@ -2103,9 +2107,9 @@ with tab_overview:
 								# Format y-axis with commas
 								ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
 								
-								# Tight margins to keep everything inside
-								plt.subplots_adjust(left=0.15, right=0.9, top=0.9, bottom=0.15)
-								st.pyplot(fig, use_container_width=True)
+								# Tight margins to keep everything inside the card
+								plt.tight_layout(pad=0.5)
+								st.pyplot(fig, use_container_width=False)  # Don't expand to prevent overflow
 								
 								# Download button for bar chart
 								try:
@@ -2187,7 +2191,8 @@ with tab_overview:
 							return lambda p: f'{p:.1f}%'
 						
 						# Create the pie chart with KPI values
-						fig2, ax2 = plt.subplots(figsize=(1.8, 1.8))
+						fig2, ax2 = plt.subplots(figsize=(3.5, 3.5), facecolor='black')  # Slightly smaller square for proper circle
+						ax2.set_facecolor('black')
 						wedges, _, autotexts = ax2.pie(
 							kpi_values,
 							labels=labels if len(kpi_values) > 1 else [''],
@@ -2196,33 +2201,24 @@ with tab_overview:
 							startangle=90,
 							counterclock=False,
 							explode=[0.03] * len(kpi_values),
-							wedgeprops=dict(width=0.5, edgecolor="#0c1326", linewidth=2),
-							textprops={'fontsize': 10, 'fontweight': 'bold', 'color': 'black'}
+							wedgeprops=dict(width=0.5, edgecolor="#1f2937", linewidth=2),
+							textprops={'fontsize': 11, 'fontweight': 'bold', 'color': 'white'}
 						)
+						plt.tight_layout(pad=0)
 						
-						# Set text color based on background for better visibility
+						# Set all text to white for visibility on black background
 						for text in autotexts:
-							try:
-								# Get the color of the corresponding wedge
-								wedge = [w for w in wedges if w.get_center() == text.get_position()][0]
-								# Calculate brightness of the wedge color
-								r, g, b, _ = wedge.get_facecolor()
-								brightness = (0.299 * r + 0.587 * g + 0.114 * b)
-								# Use white text on dark colors, black on light colors
-								text.set_color('white' if brightness < 0.6 else 'black')
-							except (IndexError, AttributeError):
-								text.set_color('black')  # Fallback to black if something goes wrong
+							text.set_color('white')
+						
+						# Set label text to white
+						for text in ax2.texts:
+							text.set_color('white')
 						
 						ax2.axis('equal')
 						
-						# Add legend only if we have multiple categories
-						if len(kpi_values) > 1:
-							ax2.legend(wedges, labels, title="Categories", 
-									 loc="center left", bbox_to_anchor=(1.15, 0.5), frameon=False)
-						
-						# Tight margins to keep pie chart completely inside blue border
-						plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
-						st.pyplot(fig2, use_container_width=True)
+						# Tight margins to keep pie chart completely inside the card
+						plt.tight_layout(pad=0.5)
+						st.pyplot(fig2, use_container_width=False)  # Don't expand to prevent overflow
 						
 						# Download button with error handling
 						try:
